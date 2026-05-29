@@ -1,0 +1,1159 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tủ đồ thông minh</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <style>
+    :root {
+      --bg: #0c1220;
+      --card: #151d2e;
+      --card-border: #243044;
+      --text: #e8edf5;
+      --muted: #8b9cb3;
+      --green: #22c55e;
+      --green-dim: rgba(34, 197, 94, 0.15);
+      --red: #ef4444;
+      --red-dim: rgba(239, 68, 68, 0.15);
+      --blue: #3b82f6;
+      --blue-dim: rgba(59, 130, 246, 0.2);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid var(--card-border);
+      background: rgba(21, 29, 46, 0.6);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+    }
+    .brand-icon {
+      width: 44px;
+      height: 44px;
+      background: var(--blue);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+    }
+    .brand h1 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+    .brand p {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+    }
+    .esp-status {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    .esp-status .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+    }
+    .esp-status.off .dot { background: var(--red); box-shadow: 0 0 8px var(--red); }
+    .clock {
+      font-size: 1.1rem;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .btn-power {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: none;
+      background: var(--red-dim);
+      color: var(--red);
+      cursor: pointer;
+      font-size: 0.95rem;
+    }
+
+    /* Layout */
+    .main {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      padding: 1rem 1.5rem 1.5rem;
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+    @media (max-width: 900px) {
+      .main { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 1rem 1.1rem;
+      margin-bottom: 1rem;
+    }
+    .card-title {
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-bottom: 0.85rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .card-title a {
+      font-size: 0.75rem;
+      color: var(--blue);
+      text-decoration: none;
+      font-weight: 500;
+      letter-spacing: 0;
+    }
+
+    /* Camera */
+    .camera-box {
+      position: relative;
+      border-radius: 12px;
+      overflow: hidden;
+      background: #000;
+      aspect-ratio: 4/3;
+    }
+    .camera-box video,
+    .camera-box .cam-snapshot {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .camera-box .cam-snapshot {
+      display: none;
+    }
+    .camera-box.frozen video { display: none; }
+    .camera-box.frozen .cam-snapshot { display: block; }
+    .camera-box.frozen .rec-badge,
+    .camera-box.frozen .face-frame { display: none; }
+    .camera-box.scanning .face-corners span {
+      border-color: #f59e0b;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .camera-box.face-ready .face-corners span {
+      border-color: var(--green);
+      box-shadow: 0 0 12px rgba(34, 197, 94, 0.6);
+    }
+    .scan-hint {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      font-size: 0.68rem;
+      background: rgba(0,0,0,0.7);
+      padding: 4px 8px;
+      border-radius: 6px;
+      z-index: 3;
+      display: none;
+      max-width: 55%;
+      text-align: right;
+      line-height: 1.3;
+    }
+    .camera-box.scanning .scan-hint { display: block; }
+    .btn-action.scanning {
+      outline: 2px solid #fff;
+      outline-offset: 2px;
+    }
+    .cam-status {
+      position: absolute;
+      bottom: 8px;
+      left: 8px;
+      font-size: 0.7rem;
+      background: rgba(0,0,0,0.65);
+      padding: 4px 8px;
+      border-radius: 6px;
+      z-index: 3;
+    }
+    .rec-badge {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: var(--red);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      z-index: 2;
+    }
+    .rec-badge::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      background: var(--red);
+      border-radius: 50%;
+      animation: blink 1s infinite;
+    }
+    @keyframes blink { 50% { opacity: 0.3; } }
+    .face-frame {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      z-index: 1;
+    }
+    .face-corners {
+      position: relative;
+      width: 42%;
+      height: 55%;
+      pointer-events: none;
+    }
+    .face-corners span {
+      position: absolute;
+      width: 22px;
+      height: 22px;
+      border: 3px solid var(--green);
+    }
+    .face-corners .tl { top: 0; left: 0; border-right: none; border-bottom: none; }
+    .face-corners .tr { top: 0; right: 0; border-left: none; border-bottom: none; }
+    .face-corners .bl { bottom: 0; left: 0; border-right: none; border-top: none; }
+    .face-corners .br { bottom: 0; right: 0; border-left: none; border-top: none; }
+
+    .btn-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.65rem;
+      margin-top: 0.85rem;
+    }
+    .btn-action {
+      padding: 0.85rem;
+      border: none;
+      border-radius: 10px;
+      font-size: 0.9rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    .btn-action:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-action:not(:disabled):active { transform: scale(0.98); }
+    .btn-gui { background: var(--blue); color: #fff; }
+    .btn-lay { background: var(--green); color: #fff; }
+
+    /* Notification strip */
+    .notify-strip {
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+      margin-top: 0.85rem;
+      padding: 0.8rem 0.9rem;
+      border-radius: 12px;
+      border: 1px solid var(--card-border);
+      background: rgba(36, 48, 68, 0.55);
+      transition: border-color 0.25s, background 0.25s;
+    }
+    .notify-strip.idle {
+      border-color: rgba(59, 130, 246, 0.35);
+      background: rgba(59, 130, 246, 0.08);
+    }
+    .notify-strip.success {
+      border-color: rgba(34, 197, 94, 0.35);
+      background: rgba(34, 197, 94, 0.08);
+    }
+    .notify-strip.error {
+      border-color: rgba(239, 68, 68, 0.35);
+      background: rgba(239, 68, 68, 0.08);
+    }
+    .notify-strip.loading {
+      border-color: rgba(245, 158, 11, 0.4);
+      background: rgba(245, 158, 11, 0.08);
+    }
+    .notify-icon {
+      width: 42px;
+      height: 42px;
+      min-width: 42px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+      border: 1px solid transparent;
+      transition: background 0.25s, border-color 0.25s, color 0.25s;
+    }
+    .notify-icon.idle {
+      background: var(--blue-dim);
+      border-color: rgba(59, 130, 246, 0.45);
+      color: var(--blue);
+    }
+    .notify-icon.success {
+      background: var(--green-dim);
+      border-color: rgba(34, 197, 94, 0.45);
+      color: var(--green);
+    }
+    .notify-icon.error {
+      background: var(--red-dim);
+      border-color: rgba(239, 68, 68, 0.45);
+      color: var(--red);
+    }
+    .notify-icon.loading {
+      background: rgba(245, 158, 11, 0.15);
+      border-color: rgba(245, 158, 11, 0.45);
+      color: #fbbf24;
+    }
+    .notify-copy {
+      min-width: 0;
+      flex: 1;
+    }
+    .notify-topline {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.2rem;
+      min-width: 0;
+      flex-wrap: wrap;
+    }
+    .notify-result {
+      font-size: 0.92rem;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+    .notify-locker {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 24px;
+      padding: 0 0.55rem;
+      border-radius: 999px;
+      border: 1px solid currentColor;
+      font-size: 0.72rem;
+      font-weight: 700;
+      line-height: 1;
+      white-space: nowrap;
+    }
+    .notify-detail-text {
+      font-size: 0.78rem;
+      line-height: 1.4;
+      color: var(--muted);
+    }
+    .val-success { color: var(--green); }
+    .val-error { color: var(--red); }
+    .val-info { color: var(--blue); }
+    .btn-notify {
+      min-width: 112px;
+      max-width: 180px;
+      padding: 0.55rem 0.8rem;
+      border: none;
+      border-radius: 999px;
+      font-size: 0.74rem;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4rem;
+      line-height: 1.25;
+      text-align: center;
+      white-space: normal;
+      transition: background 0.25s, opacity 0.2s;
+    }
+    .btn-notify.idle {
+      background: #243044;
+      color: var(--muted);
+      cursor: default;
+    }
+    .btn-notify.success {
+      background: var(--green-dim);
+      color: var(--green);
+      cursor: default;
+    }
+    .btn-notify.error {
+      background: var(--red-dim);
+      color: var(--red);
+      cursor: default;
+    }
+    .btn-notify.loading {
+      background: rgba(245, 158, 11, 0.2);
+      color: #fbbf24;
+      cursor: wait;
+    }
+    @media (max-width: 640px) {
+      .notify-strip {
+        align-items: flex-start;
+        flex-wrap: wrap;
+      }
+      .btn-notify {
+        width: 100%;
+      }
+    }
+
+    /* Locker grid */
+    .locker-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.65rem;
+    }
+    .locker-cell {
+      border-radius: 10px;
+      padding: 0.75rem 0.5rem;
+      text-align: center;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: border-color 0.15s, transform 0.1s;
+    }
+    .locker-cell:hover { transform: translateY(-2px); }
+    .locker-cell.selected {
+      border-color: var(--blue);
+      box-shadow: 0 0 0 1px var(--blue);
+    }
+    .locker-cell.empty {
+      background: var(--green-dim);
+      color: var(--green);
+    }
+    .locker-cell.busy {
+      background: var(--red-dim);
+      color: var(--red);
+    }
+    .locker-cell i { font-size: 1.5rem; margin-bottom: 0.35rem; display: block; }
+    .locker-cell .name { font-size: 0.8rem; font-weight: 600; }
+    .locker-cell .state { font-size: 0.7rem; opacity: 0.9; margin-top: 2px; }
+
+    .locker-summary {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.5rem;
+      margin-top: 0.85rem;
+      padding-top: 0.85rem;
+      border-top: 1px solid var(--card-border);
+    }
+    .sum-item {
+      text-align: center;
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+    .sum-item strong {
+      display: block;
+      font-size: 1.1rem;
+      margin-top: 0.2rem;
+      color: var(--text);
+    }
+    .sum-item.red strong { color: var(--red); }
+    .sum-item.green strong { color: var(--green); }
+
+    /* History */
+    .history-list { list-style: none; }
+    .history-item {
+      display: flex;
+      gap: 0.75rem;
+      padding: 0.65rem 0;
+      border-bottom: 1px solid var(--card-border);
+      font-size: 0.8rem;
+    }
+    .history-item:last-child { border-bottom: none; }
+    .history-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-size: 0.75rem;
+    }
+    .history-icon.ok { background: var(--green-dim); color: var(--green); }
+    .history-icon.err { background: var(--red-dim); color: var(--red); }
+    .history-icon.info { background: var(--blue-dim); color: var(--blue); }
+    .history-body { flex: 1; min-width: 0; }
+    .history-body .title { font-weight: 600; margin-bottom: 2px; }
+    .history-body .desc { color: var(--muted); font-size: 0.75rem; }
+    .history-time {
+      font-size: 0.75rem;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 1.5rem;
+      left: 50%;
+      transform: translateX(-50%) translateY(120%);
+      padding: 0.85rem 1.25rem;
+      border-radius: 10px;
+      font-size: 0.9rem;
+      max-width: 90%;
+      z-index: 100;
+      transition: transform 0.3s;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); }
+    .toast.ok { background: #14532d; border: 1px solid var(--green); }
+    .toast.err { background: #7f1d1d; border: 1px solid var(--red); }
+
+    canvas { display: none; }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="brand">
+      <div class="brand-icon"><i class="fa-solid fa-lock"></i></div>
+      <div>
+        <h1>TỦ ĐỒ THÔNG MINH</h1>
+        <p>Ứng dụng AI trong xác thực khuôn mặt</p>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="esp-status" id="espStatus">
+        <span class="dot"></span>
+        <span>Kết nối ESP32: <strong id="espText">Đang kiểm tra…</strong></span>
+      </div>
+      <div class="clock"><i class="fa-regular fa-clock"></i> <span id="clock">00:00:00</span></div>
+      <button type="button" class="btn-power" title="Tải lại trang" onclick="location.reload()">
+        <i class="fa-solid fa-power-off"></i>
+      </button>
+    </div>
+  </header>
+
+  <div class="main">
+    <div class="col-left">
+      <section class="card">
+        <div class="card-title">XÁC THỰC KHUÔN MẶT</div>
+        <div class="camera-box" id="cameraBox">
+          <div class="rec-badge" id="recBadge">REC</div>
+          <video id="cam" autoplay playsinline muted></video>
+          <img id="camSnapshot" class="cam-snapshot" alt="Ảnh đã chụp" />
+          <div class="face-frame" id="faceFrame">
+            <div class="face-corners">
+              <span class="tl"></span><span class="tr"></span>
+              <span class="bl"></span><span class="br"></span>
+            </div>
+          </div>
+          <span class="scan-hint" id="scanHint">Đưa khuôn mặt vào giữa khung</span>
+          <span class="cam-status" id="camStatus">Đang mở camera…</span>
+        </div>
+        <div class="notify-strip idle" id="notifyCard">
+          <div class="notify-icon idle" id="legacyNotifyIcon">
+            <i class="fa-solid fa-circle-info" id="legacyNotifyIconI"></i>
+          </div>
+          <div class="notify-copy">
+            <div class="notify-topline">
+              <span id="notifyResult" class="notify-result val-info">Chá» xÃ¡c thá»±c</span>
+              <span id="notifyLocker" class="notify-locker val-info">â€”</span>
+            </div>
+            <div id="notifyDetail" class="notify-detail-text">Nháº¥n Gá»­i Ä‘á»“ hoáº·c Láº¥y Ä‘á»“</div>
+          </div>
+          <div class="btn-notify idle" id="notifyAction" style="display:none">
+            <i class="fa-solid fa-bell"></i>
+            <span id="notifyActionText">Chá» thao tÃ¡c</span>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button type="button" class="btn-action btn-gui" id="btnGuiDo" disabled>
+            <i class="fa-solid fa-camera"></i> GỬI ĐỒ
+          </button>
+          <button type="button" class="btn-action btn-lay" id="btnLayDo" disabled>
+            <i class="fa-solid fa-inbox"></i> LẤY ĐỒ
+          </button>
+        </div>
+      </section>
+
+      <section class="card" id="legacyNotifyCard" style="display: none">
+        <div class="card-title">THÔNG BÁO</div>
+        <div class="notify-inner">
+          <div class="notify-icon idle" id="notifyIcon">
+            <i class="fa-solid fa-circle-info" id="notifyIconI"></i>
+          </div>
+          <div class="notify-info">
+            <p>Kết quả: <span id="notifyResult" class="val-info">Chờ xác thực</span></p>
+            <p>Tủ: <span id="notifyLocker" class="val-info">—</span></p>
+            <p>Chi tiết: <span id="notifyDetail" class="val-info">Nhấn Gửi đồ hoặc Lấy đồ</span></p>
+          </div>
+        </div>
+        <div class="btn-notify idle" id="notifyAction" style="display:none">
+          <i class="fa-solid fa-bell"></i>
+          <span id="notifyActionText">Chờ thao tác</span>
+        </div>
+      </section>
+    </div>
+
+    <div class="col-right">
+      <section class="card">
+        <div class="card-title">TRẠNG THÁI TỦ</div>
+        <div class="locker-grid" id="lockerGrid"></div>
+        <div class="locker-summary">
+          <div class="sum-item"><span>Tổng số tủ</span><strong id="sumTotal">0</strong></div>
+          <div class="sum-item red"><span>Đang sử dụng</span><strong id="sumBusy">0</strong></div>
+          <div class="sum-item green"><span>Còn trống</span><strong id="sumEmpty">0</strong></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-title">
+          LỊCH SỬ HOẠT ĐỘNG
+        </div>
+        <ul class="history-list" id="historyList"></ul>
+      </section>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+  <canvas id="snap"></canvas>
+
+  <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.14/dist/face-api.js"></script>
+  <script>
+    const video = document.getElementById("cam");
+    const canvas = document.getElementById("snap");
+    const cameraBox = document.getElementById("cameraBox");
+    const camSnapshot = document.getElementById("camSnapshot");
+    const camStatus = document.getElementById("camStatus");
+    const btnGuiDo = document.getElementById("btnGuiDo");
+    const btnLayDo = document.getElementById("btnLayDo");
+    const lockerGrid = document.getElementById("lockerGrid");
+    const notifyCard = document.getElementById("notifyCard");
+    const notifyIcon = notifyCard.querySelector(".notify-icon");
+    const notifyIconI = notifyIcon.querySelector("i");
+    const notifyResult = notifyCard.querySelector(".notify-result");
+    const notifyLocker = notifyCard.querySelector(".notify-locker");
+    const notifyDetail = notifyCard.querySelector(".notify-detail-text");
+    const notifyAction = notifyCard.querySelector(".btn-notify");
+    const notifyActionText = notifyAction.querySelector("span");
+    const historyList = document.getElementById("historyList");
+    const toast = document.getElementById("toast");
+
+    let lockerState = { can_gui_do: false, can_lay_do: false, lockers: [] };
+    let selectedLockerId = null;
+    let mediaStream = null;
+    let cameraActive = false;
+    let faceModelsReady = false;
+    let scanMode = null;
+    let scanTimer = null;
+    let stableFrames = 0;
+    const STABLE_NEEDED = 6;
+    const SCAN_INTERVAL_MS = 120;
+    const FACE_MODEL_URL = "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.14/model";
+    const faceFrame = document.getElementById("faceFrame");
+    const scanHint = document.getElementById("scanHint");
+
+    function formatTime(isoOrStr) {
+      if (!isoOrStr) return "—";
+      const d = new Date(isoOrStr.replace(" ", "T"));
+      if (isNaN(d)) return isoOrStr.slice(11, 19) || isoOrStr;
+      return d.toTimeString().slice(0, 8);
+    }
+
+    function updateClock() {
+      document.getElementById("clock").textContent = new Date().toTimeString().slice(0, 8);
+    }
+
+    function showToast(ok, msg) {
+      toast.textContent = msg;
+      toast.className = "toast show " + (ok ? "ok" : "err");
+      setTimeout(() => toast.classList.remove("show"), 4000);
+    }
+
+    function captureB64() {
+      const w = video.videoWidth, h = video.videoHeight;
+      if (!w || !h) throw new Error("Camera chưa sẵn sàng");
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext("2d").drawImage(video, 0, 0, w, h);
+      return canvas.toDataURL("image/jpeg", 0.92);
+    }
+
+    function stopCamera() {
+      stopAutoScan();
+      if (mediaStream) {
+        mediaStream.getTracks().forEach((t) => t.stop());
+        mediaStream = null;
+      }
+      video.srcObject = null;
+      cameraActive = false;
+      cameraBox.classList.add("frozen");
+      if (camStatus) camStatus.textContent = "Đã chụp ảnh";
+      updateButtons();
+    }
+
+    /** Chụp một khung hình rồi tắt camera ngay. */
+    function captureAndStopCamera() {
+      const b64 = captureB64();
+      camSnapshot.src = b64;
+      stopCamera();
+      return b64;
+    }
+
+    function updateCamUI() {
+      if (cameraActive) {
+        cameraBox.classList.remove("frozen");
+        camSnapshot.removeAttribute("src");
+        if (camStatus && faceModelsReady) {
+          camStatus.textContent = "Sẵn sàng — bấm Gửi đồ hoặc Lấy đồ";
+        } else if (camStatus) {
+          camStatus.textContent = "Camera sẵn sàng";
+        }
+      }
+    }
+
+    async function resumeCameraAfterAuth() {
+      await startCamera();
+      updateButtons();
+    }
+
+    function setNotify(state, opts = {}) {
+      const lockerText = opts.locker ?? "";
+
+      notifyCard.className = "notify-strip " + state;
+      notifyIcon.className = "notify-icon " + state;
+      notifyAction.className = "btn-notify " + state;
+      notifyResult.className = "notify-result val-" + (state === "idle" || state === "loading" ? "info" : state === "success" ? "success" : "error");
+      notifyLocker.className = "notify-locker val-" + (opts.lockerClass || (state === "success" ? "success" : state === "error" ? "error" : "info"));
+      notifyDetail.className = "notify-detail-text val-" + (state === "error" ? "error" : state === "success" ? "success" : "info");
+
+      const icons = {
+        idle: "fa-circle-info",
+        success: "fa-circle-check",
+        error: "fa-circle-xmark",
+        loading: "fa-spinner fa-spin",
+      };
+      notifyIconI.className = "fa-solid " + (icons[state] || icons.idle);
+      notifyLocker.style.display = String(lockerText || "").trim().length > 1 ? "inline-flex" : "none";
+      if (opts.result == null) notifyResult.textContent = "Xin chào!";
+      if (opts.action == null) notifyActionText.textContent = "";
+
+      notifyResult.textContent = opts.result ?? "Chờ xác thực";
+      notifyLocker.textContent = opts.locker ?? "—";
+      notifyDetail.textContent = opts.detail ?? "Nhấn Gửi đồ hoặc Lấy đồ";
+      notifyActionText.textContent = opts.action ?? "Chờ thao tác";
+    }
+
+    function describeFaceAuthError(message) {
+      const msg = String(message || "").trim();
+
+      if (/anti-spoof|gia mao|giả mạo|anh hoac man hinh|ảnh hoặc màn hình|install torch|pip install torch|torch/i.test(msg)) {
+        return {
+          result: "Lỗi anti-spoof",
+          detail: msg,
+          action: "Dùng khuôn mặt thật, không chụp qua ảnh hoặc màn hình",
+        };
+      }
+
+      if (/khong phat hien khuon mat|không phát hiện khuôn mặt|no face/i.test(msg)) {
+        return {
+          result: "Không thấy khuôn mặt",
+          detail: msg,
+          action: "Đưa mặt vào giữa khung và nhìn thẳng camera",
+        };
+      }
+
+      if (/qua nho|quá nhỏ|tien gan camera|tiến gần camera/i.test(msg)) {
+        return {
+          result: "Khuôn mặt quá xa",
+          detail: msg,
+          action: "Tiến gần camera hơn rồi thử lại",
+        };
+      }
+
+      if (/goc nghieng|góc nghiêng|nghieng dau|nghiêng đầu/i.test(msg)) {
+        return {
+          result: "Mặt đang bị nghiêng",
+          detail: msg,
+          action: "Giữ đầu thẳng trước camera rồi thử lại",
+        };
+      }
+
+      if (/ty le khuon mat|tỷ lệ khuôn mặt|khong hop le|không hợp lệ/i.test(msg)) {
+        return {
+          result: "Góc mặt chưa phù hợp",
+          detail: msg,
+          action: "Nhìn thẳng camera và giữ trọn khuôn mặt trong khung",
+        };
+      }
+
+      if (/embedding|trich xuat|trích xuất|khong ro|không rõ/i.test(msg)) {
+        return {
+          result: "Ảnh khuôn mặt chưa rõ",
+          detail: msg,
+          action: "Giữ yên, đủ sáng và thử lại",
+        };
+      }
+
+      return {
+        result: "Khó xác thực khuôn mặt",
+        detail: msg || "Vui lòng thử lại.",
+        action: "Giữ mặt rõ, nhìn thẳng camera rồi thử lại",
+      };
+    }
+
+    function showNotifyFromApi(data, actionLabel) {
+      if (data.ok) {
+        const lockerTxt = data.locker_id ? "Tủ " + data.locker_id : "—";
+        let detail = data.message || "Xác thực thành công";
+        if (data.confidence != null) detail += ` · Tin cậy ${data.confidence}%`;
+        setNotify("success", {
+          result: "Xác thực thành công",
+          locker: lockerTxt,
+          detail,
+          lockerClass: "success",
+          action: data.locker_id
+            ? `Tủ số ${data.locker_id} đã mở — có thể thao tác tiếp`
+            : `${actionLabel} thành công — có thể thao tác tiếp`,
+        });
+      } else {
+        const failure = describeFaceAuthError(data.message);
+        setNotify("error", {
+          result: failure.result,
+          locker: "",
+          detail: failure.detail,
+          action: failure.action,
+        });
+      }
+    }
+
+    function renderLockers(lockers) {
+      lockerGrid.innerHTML = lockers
+        .map(
+          (l) => `
+        <div class="locker-cell ${l.is_empty ? "empty" : "busy"} ${l.id === selectedLockerId ? "selected" : ""}"
+             data-id="${l.id}">
+          <i class="fa-solid fa-box"></i>
+          <div class="name">Tủ ${l.id}</div>
+          <div class="state">${l.label}</div>
+        </div>`
+        )
+        .join("");
+      lockerGrid.querySelectorAll(".locker-cell").forEach((cell) => {
+        cell.onclick = () => {
+          selectedLockerId = parseInt(cell.dataset.id, 10);
+          renderLockers(lockerState.lockers);
+        };
+      });
+    }
+
+    function logToHistoryItem(log) {
+      const ok = log.status === "SUCCESS";
+      const spoof = log.status === "SPOOF";
+      let icon = ok ? "ok" : "err";
+      let iconClass = ok ? "fa-check" : "fa-xmark";
+      let title = log.message || log.action_type;
+      let desc = log.action_type;
+
+      if (log.action_type === "GUI_DO" && ok) {
+        title = "Gửi đồ thành công";
+        desc = log.message || "";
+      } else if (log.action_type === "LAY_DO" && ok) {
+        title = "Lấy đồ thành công";
+        desc = log.message || "";
+      } else if (log.action_type === "MANUAL" && ok) {
+        title = "Mở tủ thủ công";
+        desc = log.message || "";
+      } else if (!ok) {
+        title = log.status === "SPOOF" ? "Cảnh báo giả mạo" : "Xác thực thất bại";
+        desc = log.message || "Không khớp khuôn mặt";
+      }
+      if (log.action_type === "SYSTEM") {
+        icon = "info";
+        iconClass = "fa-info";
+      }
+
+      return `
+        <li class="history-item">
+          <div class="history-icon ${icon}"><i class="fa-solid ${iconClass}"></i></div>
+          <div class="history-body">
+            <div class="title">${title}</div>
+            <div class="desc">${desc}</div>
+          </div>
+          <span class="history-time">${formatTime(log.timestamp)}</span>
+        </li>`;
+    }
+
+    async function loadHistory(limit = 5) {
+      try {
+        const res = await fetch("/face/logs?limit=" + limit);
+        const data = await res.json();
+        const logs = data.logs || [];
+        if (!logs.length) {
+          historyList.innerHTML = '<li class="history-item"><div class="history-body"><div class="desc">Chưa có hoạt động</div></div></li>';
+          return;
+        }
+        historyList.innerHTML = logs.map(logToHistoryItem).join("");
+      } catch {
+        historyList.innerHTML = '<li class="history-item"><div class="history-body"><div class="desc">Không tải được lịch sử</div></div></li>';
+      }
+    }
+
+    function updateButtons() {
+      if (scanMode) {
+        btnGuiDo.disabled = scanMode.url !== "/face/gui-do";
+        btnLayDo.disabled = scanMode.url !== "/face/lay-do";
+        return;
+      }
+      const ready = cameraActive && faceModelsReady;
+      btnGuiDo.disabled = !ready || !lockerState.can_gui_do;
+      btnLayDo.disabled = !ready || !lockerState.can_lay_do;
+    }
+
+    async function loadFaceModels() {
+      if (typeof faceapi === "undefined") {
+        showToast(false, "Thư viện nhận diện khuôn mặt chưa tải");
+        return;
+      }
+      try {
+        if (camStatus) camStatus.textContent = "Đang tải AI phát hiện mặt…";
+        await faceapi.nets.tinyFaceDetector.loadFromUri(FACE_MODEL_URL);
+        faceModelsReady = true;
+        if (cameraActive && camStatus) camStatus.textContent = "Nhìn vào giữa khung — bấm Gửi/Lấy đồ";
+      } catch (e) {
+        faceModelsReady = false;
+        showToast(false, "Không tải model: " + e.message);
+      }
+      updateButtons();
+    }
+
+    function isFaceCentered(detection) {
+      const box = detection.box;
+      const vw = video.videoWidth;
+      const vh = video.videoHeight;
+      const cx = box.x + box.width / 2;
+      const cy = box.y + box.height / 2;
+      const offX = Math.abs(cx - vw / 2) / vw;
+      const offY = Math.abs(cy - vh / 2) / vh;
+      const centered = offX < 0.14 && offY < 0.14;
+      const bigEnough = box.width / vw > 0.2 && box.height / vh > 0.22;
+      return centered && bigEnough;
+    }
+
+    function stopAutoScan() {
+      if (scanTimer) {
+        clearInterval(scanTimer);
+        scanTimer = null;
+      }
+      scanMode = null;
+      stableFrames = 0;
+      cameraBox.classList.remove("scanning", "face-ready");
+      btnGuiDo.classList.remove("scanning");
+      btnLayDo.classList.remove("scanning");
+      updateButtons();
+    }
+
+    function cancelAutoScan() {
+      stopAutoScan();
+      setNotify("idle", {
+        detail: "Đã hủy quét. Nhấn Gửi đồ hoặc Lấy đồ để thử lại",
+      });
+      if (camStatus) camStatus.textContent = "Camera sẵn sàng";
+    }
+    async function tickAutoScan() {
+      if (!scanMode || !cameraActive) return;
+      try {
+        const det = await faceapi.detectSingleFace(
+          video,
+          new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.45 })
+        );
+        if (!det || !isFaceCentered(det)) {
+          stableFrames = 0;
+          cameraBox.classList.remove("face-ready");
+          const reason = !det ? "Chưa thấy khuôn mặt" : "Đưa mặt vào giữa khung";
+          if (scanHint) scanHint.textContent = reason;
+          if (camStatus) camStatus.textContent = reason;
+          return;
+        }
+        stableFrames += 1;
+        const pct = Math.min(100, Math.round((stableFrames / STABLE_NEEDED) * 100));
+        if (scanHint) scanHint.textContent = `Giữ yên… ${pct}%`;
+        if (camStatus) camStatus.textContent = `Giữ yên để tự chụp ${pct}%`;
+        if (stableFrames >= STABLE_NEEDED - 1) {
+          cameraBox.classList.add("face-ready");
+        }
+        if (stableFrames >= STABLE_NEEDED) {
+          const mode = scanMode;
+          stopAutoScan();
+          await submitFaceApi(mode.url, mode.label);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function startAutoScan(url, actionLabel) {
+      if (!cameraActive) {
+        setNotify("error", {
+          result: "Camera chưa bật",
+          detail: "Đang khởi động lại camera…",
+          action: "Vui lòng đợi",
+        });
+        return;
+      }
+      if (!faceModelsReady) {
+        setNotify("error", {
+          result: "AI chưa sẵn sàng",
+          detail: "Đang tải model phát hiện mặt, thử lại sau vài giây",
+          action: "Đợi và thử lại",
+        });
+        return;
+      }
+      if (scanMode?.url === url) {
+        cancelAutoScan();
+        return;
+      }
+      stopAutoScan();
+      scanMode = { url, label: actionLabel };
+      stableFrames = 0;
+      cameraBox.classList.add("scanning");
+      if (url === "/face/gui-do") btnGuiDo.classList.add("scanning");
+      else btnLayDo.classList.add("scanning");
+      setNotify("idle", {
+        result: "Đang quét khuôn mặt",
+        locker: "",
+        detail: `Bấm lại «${actionLabel}» để hủy · Tự chụp khi mặt ở giữa khung`,
+        action: "Đưa mặt vào giữa khung xanh",
+      });
+      if (camStatus) camStatus.textContent = "Đưa khuôn mặt vào giữa khung";
+      updateButtons();
+      scanTimer = setInterval(tickAutoScan, SCAN_INTERVAL_MS);
+    }
+
+    async function refreshStatus() {
+      try {
+        const res = await fetch("/face/status");
+        const data = await res.json();
+        lockerState = data;
+        if (selectedLockerId === null && data.lockers?.length) {
+          const first = data.lockers.find((l) => l.is_empty) || data.lockers[0];
+          selectedLockerId = first.id;
+        }
+        renderLockers(data.lockers || []);
+        document.getElementById("sumTotal").textContent = data.total_lockers ?? 0;
+        document.getElementById("sumBusy").textContent = data.in_use_lockers ?? 0;
+        document.getElementById("sumEmpty").textContent = data.empty_lockers ?? 0;
+
+        const espEl = document.getElementById("espStatus");
+        const espText = document.getElementById("espText");
+        if (data.esp_connected) {
+          espEl.classList.remove("off");
+          espText.textContent = "Đã kết nối";
+        } else {
+          espEl.classList.add("off");
+          espText.textContent = "Mất kết nối";
+        }
+        updateButtons();
+      } catch {
+        setNotify("error", {
+          result: "Lỗi kết nối",
+          locker: "",
+          detail: "Không kết nối được server",
+          action: "Kiểm tra lại server",
+        });
+      }
+    }
+
+    async function submitFaceApi(url, actionLabel) {
+      btnGuiDo.disabled = true;
+      btnLayDo.disabled = true;
+      let imageB64;
+      try {
+        imageB64 = captureAndStopCamera();
+      } catch (e) {
+        setNotify("error", {
+          result: "Không chụp được ảnh",
+          detail: e.message,
+          action: "Thử lại sau khi camera bật",
+        });
+        await resumeCameraAfterAuth();
+        return;
+      }
+      setNotify("loading", {
+        result: "Đang xác thực…",
+        locker: "",
+        detail: "AI đang phân tích ảnh vừa chụp",
+        action: "Vui lòng đợi",
+      });
+      try {
+        const fd = new FormData();
+        fd.append("image", imageB64);
+        const res = await fetch(url, { method: "POST", body: fd });
+        const data = await res.json();
+        showNotifyFromApi(data, actionLabel);
+        if (data.locker_id) selectedLockerId = data.locker_id;
+        await refreshStatus();
+        await loadHistory();
+        return data;
+      } catch (e) {
+        setNotify("error", {
+          result: "Lỗi hệ thống",
+          detail: e.message,
+          action: "Bấm Gửi đồ hoặc Lấy đồ để thử lại",
+        });
+      } finally {
+        await resumeCameraAfterAuth();
+      }
+    }
+
+    btnGuiDo.onclick = () => startAutoScan("/face/gui-do", "Gửi đồ");
+    btnLayDo.onclick = () => startAutoScan("/face/lay-do", "Lấy đồ");
+
+    async function startCamera() {
+      if (mediaStream) {
+        mediaStream.getTracks().forEach((t) => t.stop());
+        mediaStream = null;
+      }
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
+        });
+        video.srcObject = mediaStream;
+        cameraActive = false;
+        video.onloadedmetadata = () => {
+          cameraActive = true;
+          updateCamUI();
+          if (faceModelsReady && camStatus) {
+            camStatus.textContent = "Nhìn vào giữa khung — bấm Gửi/Lấy đồ";
+          }
+          updateButtons();
+        };
+      } catch (e) {
+        cameraActive = false;
+        showToast(false, "Không mở được camera: " + e.message);
+        if (camStatus) camStatus.textContent = "Lỗi camera";
+      }
+    }
+
+    updateClock();
+    setInterval(updateClock, 1000);
+    setNotify("idle", {
+      detail: "Bấm Gửi đồ hoặc Lấy đồ — hệ thống tự chụp khi mặt ở giữa khung",
+    });
+    notifyResult.textContent = "Xin ch\u00E0o!";
+    refreshStatus();
+    loadHistory();
+    loadFaceModels();
+    startCamera();
+    setInterval(refreshStatus, 12000);
+  </script>
+</body>
+</html>

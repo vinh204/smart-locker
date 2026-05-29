@@ -1,0 +1,8 @@
+.venv/
+__pycache__/
+*.pyc
+face_db.sqlite
+face_db/
+*.jpg
+*.png
+.DS_Store
