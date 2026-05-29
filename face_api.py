@@ -10,6 +10,7 @@ from face_utils import (
     capture_face_embedding,
     distance_to_confidence_percent,
     find_matching_deposit,
+    is_spoof_rejection,
 )
 from locker_service import open_locker
 
@@ -86,7 +87,8 @@ async def gui_do(
 
     ok, msg, embedding = capture_face_embedding(img)
     if not ok or embedding is None:
-        db.log_action(action, "FAILED", message=msg)
+        status = "SPOOF" if is_spoof_rejection(msg) else "FAILED"
+        db.log_action(action, status, message=msg)
         return {"ok": False, "message": msg}
 
     started = db.start_deposit(embedding)
@@ -101,7 +103,7 @@ async def gui_do(
     db.log_action(
         action,
         "SUCCESS",
-        message=f"Gửi đồ — tủ {locker_id}, ID {deposit_id[:8]}",
+        message=f"Gửi đồ thành công — tủ {locker_id}",
     )
     return {
         "ok": True,
@@ -121,7 +123,7 @@ async def lay_do(
     action = "LAY_DO"
     active = db.get_active_deposits()
     if not active:
-        msg = "Không tìm thấy thông tin gửi đồ"
+        msg = "Chưa có ai gửi đồ trong hệ thống"
         db.log_action(action, "FAILED", message=msg)
         return {"ok": False, "message": msg}
 
@@ -132,20 +134,27 @@ async def lay_do(
 
     ok, msg, embedding = capture_face_embedding(img)
     if not ok or embedding is None:
-        db.log_action(action, "FAILED", message=msg)
+        status = "SPOOF" if is_spoof_rejection(msg) else "FAILED"
+        db.log_action(action, status, message=msg)
         return {"ok": False, "message": msg}
 
     matched, distance = find_matching_deposit(embedding, active)
     confidence = distance_to_confidence_percent(distance)
 
     if matched is None:
-        msg = "Không tìm thấy thông tin gửi đồ"
+        if confidence <= 0:
+            msg = "Không tìm thấy phiên gửi đồ nào trong hệ thống."
+        else:
+            msg = (
+                f"Khuôn mặt không khớp với ai đã gửi đồ (độ tin cậy {confidence}%, chưa đủ). "
+                "Hãy dùng đúng người đã gửi đồ trước đó."
+            )
         db.log_action(action, "FAILED", confidence=confidence, message=msg)
         return {"ok": False, "message": msg, "confidence": confidence}
 
     locker_id = db.complete_deposit(matched["id"])
     if locker_id is None:
-        msg = "Không tìm thấy thông tin gửi đồ"
+        msg = "Không tìm thấy tủ tương ứng với phiên gửi đồ này"
         db.log_action(action, "FAILED", message=msg)
         return {"ok": False, "message": msg}
 
@@ -154,7 +163,7 @@ async def lay_do(
         action,
         "SUCCESS",
         confidence=confidence,
-        message=f"Lấy đồ — tủ {locker_id}",
+        message=f"Lấy đồ thành công — tủ {locker_id}",
     )
     return {
         "ok": True,

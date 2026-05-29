@@ -546,7 +546,7 @@
       <section class="card">
         <div class="card-title">XÁC THỰC KHUÔN MẶT</div>
         <div class="camera-box" id="cameraBox">
-          <div class="rec-badge" id="recBadge">REC</div>
+          <div class="rec-badge" id="recBadge">ĐANG QUAY</div>
           <video id="cam" autoplay playsinline muted></video>
           <img id="camSnapshot" class="cam-snapshot" alt="Ảnh đã chụp" />
           <div class="face-frame" id="faceFrame">
@@ -564,14 +564,14 @@
           </div>
           <div class="notify-copy">
             <div class="notify-topline">
-              <span id="notifyResult" class="notify-result val-info">Chá» xÃ¡c thá»±c</span>
-              <span id="notifyLocker" class="notify-locker val-info">â€”</span>
+              <span id="notifyResult" class="notify-result val-info">Chờ xác thực</span>
+              <span id="notifyLocker" class="notify-locker val-info">—</span>
             </div>
-            <div id="notifyDetail" class="notify-detail-text">Nháº¥n Gá»­i Ä‘á»“ hoáº·c Láº¥y Ä‘á»“</div>
+            <div id="notifyDetail" class="notify-detail-text">Nhấn Gửi đồ hoặc Lấy đồ</div>
           </div>
           <div class="btn-notify idle" id="notifyAction" style="display:none">
             <i class="fa-solid fa-bell"></i>
-            <span id="notifyActionText">Chá» thao tÃ¡c</span>
+            <span id="notifyActionText">Chờ thao tác</span>
           </div>
         </div>
         <div class="btn-row">
@@ -755,11 +755,35 @@
     function describeFaceAuthError(message) {
       const msg = String(message || "").trim();
 
-      if (/anti-spoof|gia mao|giả mạo|anh hoac man hinh|ảnh hoặc màn hình|install torch|pip install torch|torch/i.test(msg)) {
+      if (/khong tim thay|không tìm thấy|khong khop|không khớp|tin cay|tin cậy/i.test(msg)) {
         return {
-          result: "Lỗi anti-spoof",
+          result: "Không khớp phiên gửi đồ",
+          detail: msg,
+          action: "Dùng đúng khuôn mặt đã gửi đồ trước đó",
+        };
+      }
+
+      if (/het tu|hết tủ|khong con tu|không còn tủ/i.test(msg)) {
+        return {
+          result: "Hết tủ trống",
+          detail: msg,
+          action: "Chờ có tủ trống hoặc lấy đồ trước",
+        };
+      }
+
+      if (/anti-spoof|chong gia mao|chống giả mạo|gia mao|giả mạo|anh in|ảnh in|man hinh|màn hình/i.test(msg)) {
+        return {
+          result: "Lỗi chống giả mạo",
           detail: msg,
           action: "Dùng khuôn mặt thật, không chụp qua ảnh hoặc màn hình",
+        };
+      }
+
+      if (/loi ai|lỗi ai|embedding|trich xuat|trích xuất/i.test(msg)) {
+        return {
+          result: "Lỗi xử lý AI",
+          detail: msg,
+          action: "Thử lại với ánh sáng tốt hơn",
         };
       }
 
@@ -855,30 +879,46 @@
       });
     }
 
+    const ACTION_VI = {
+      GUI_DO: "Gửi đồ",
+      LAY_DO: "Lấy đồ",
+      MANUAL: "Mở tủ thủ công",
+      SYSTEM: "Hệ thống",
+    };
+
     function logToHistoryItem(log) {
       const ok = log.status === "SUCCESS";
-      const spoof = log.status === "SPOOF";
       let icon = ok ? "ok" : "err";
       let iconClass = ok ? "fa-check" : "fa-xmark";
-      let title = log.message || log.action_type;
-      let desc = log.action_type;
+      let title = log.message || ACTION_VI[log.action_type] || log.action_type;
+      let desc = ACTION_VI[log.action_type] || log.action_type;
 
       if (log.action_type === "GUI_DO" && ok) {
         title = "Gửi đồ thành công";
-        desc = log.message || "";
+        desc = log.message || "Đã mở tủ và lưu phiên gửi đồ";
       } else if (log.action_type === "LAY_DO" && ok) {
         title = "Lấy đồ thành công";
-        desc = log.message || "";
+        desc = log.message || "Đã xác thực và mở tủ";
       } else if (log.action_type === "MANUAL" && ok) {
         title = "Mở tủ thủ công";
         desc = log.message || "";
       } else if (!ok) {
-        title = log.status === "SPOOF" ? "Cảnh báo giả mạo" : "Xác thực thất bại";
-        desc = log.message || "Không khớp khuôn mặt";
+        if (log.status === "SPOOF") {
+          title = "Cảnh báo giả mạo";
+          desc = log.message || "Phát hiện ảnh hoặc màn hình giả";
+        } else if (log.status === "ERROR") {
+          title = "Lỗi hệ thống";
+          desc = log.message || "Có lỗi xảy ra";
+        } else {
+          title = "Xác thực thất bại";
+          desc = log.message || "Không khớp khuôn mặt";
+        }
       }
       if (log.action_type === "SYSTEM") {
         icon = "info";
         iconClass = "fa-info";
+        title = log.message || "Thông báo hệ thống";
+        desc = "Hệ thống";
       }
 
       return `
@@ -1148,7 +1188,7 @@
     setNotify("idle", {
       detail: "Bấm Gửi đồ hoặc Lấy đồ — hệ thống tự chụp khi mặt ở giữa khung",
     });
-    notifyResult.textContent = "Xin ch\u00E0o!";
+    notifyResult.textContent = "Xin chào!";
     refreshStatus();
     loadHistory();
     loadFaceModels();

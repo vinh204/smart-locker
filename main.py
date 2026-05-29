@@ -15,7 +15,7 @@ from face_api import router as face_router
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 STATIC_DIR.mkdir(exist_ok=True)
 
-app = FastAPI(title="Smart Locker — Bước 1: Nhận diện khuôn mặt")
+app = FastAPI(title="Tủ đồ thông minh — Nhận diện khuôn mặt")
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 app.include_router(face_router)
 
