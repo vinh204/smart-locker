@@ -16,11 +16,11 @@ const historyList = document.getElementById("historyList");
 const toast = document.getElementById("toast");
 const scanHint = document.getElementById("scanHint");
 
-const IDLE_TITLE = "Xin ch\u00E0o!";
+const IDLE_TITLE = "Xin chào!";
 const IDLE_DETAIL =
-  "Vui l\u00F2ng nh\u00ECn v\u00E0o gi\u1EEFa khung v\u00E0 b\u1EA5m G\u1EEDi \u0111\u1ED3 ho\u1EB7c L\u1EA5y \u0111\u1ED3";
-const ACTION_GUI = "G\u1EEDi \u0111\u1ED3";
-const ACTION_LAY = "L\u1EA5y \u0111\u1ED3";
+  "Vui lòng nhìn vào giữa khung và bấm Gửi đồ hoặc Lấy đồ";
+const ACTION_GUI = "Gửi đồ";
+const ACTION_LAY = "Lấy đồ";
 const FACE_MODEL_URL = "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.14/model";
 const STABLE_NEEDED = 6;
 const SCAN_INTERVAL_MS = 120;
@@ -35,7 +35,7 @@ let scanTimer = null;
 let stableFrames = 0;
 
 function formatTime(isoOrStr) {
-  if (!isoOrStr) return "\u2014";
+  if (!isoOrStr) return "—";
   const d = new Date(String(isoOrStr).replace(" ", "T"));
   if (Number.isNaN(d.getTime())) return String(isoOrStr).slice(11, 19) || String(isoOrStr);
   return d.toTimeString().slice(0, 8);
@@ -86,73 +86,73 @@ function setNotify(state, opts = {}) {
 function describeFaceAuthError(message) {
   const msg = String(message || "").trim();
 
-  if (/anti-spoof|gia mao|gi\u1EA3 m\u1EA1o|anh hoac man hinh|\u1EA3nh ho\u1EB7c m\u00E0n h\u00ECnh|install torch|pip install torch|torch/i.test(msg)) {
+  if (/anti-spoof|gia mao|giả mạo|anh hoac man hinh|ảnh hoặc màn hình|install torch|pip install torch|torch/i.test(msg)) {
     return {
-      result: "L\u1ED7i anti-spoof",
+      result: "Lỗi anti-spoof",
       detail: msg,
-      action: "D\u00F9ng khu\u00F4n m\u1EB7t th\u1EADt, kh\u00F4ng ch\u1EE5p qua \u1EA3nh ho\u1EB7c m\u00E0n h\u00ECnh",
+      action: "Dùng khuôn mặt thật, không chụp qua ảnh hoặc màn hình",
     };
   }
 
-  if (/khong phat hien khuon mat|kh\u00F4ng ph\u00E1t hi\u1EC7n khu\u00F4n m\u1EB7t|no face/i.test(msg)) {
+  if (/khong phat hien khuon mat|không phát hiện khuôn mặt|no face/i.test(msg)) {
     return {
-      result: "Kh\u00F4ng th\u1EA5y khu\u00F4n m\u1EB7t",
+      result: "Không thấy khuôn mặt",
       detail: msg,
-      action: "\u0110\u01B0a m\u1EB7t v\u00E0o gi\u1EEFa khung v\u00E0 nh\u00ECn th\u1EB3ng camera",
+      action: "Đưa mặt vào giữa khung và nhìn thẳng camera",
     };
   }
 
-  if (/qua nho|qu\u00E1 nh\u1ECF|tien gan camera|ti\u1EBFn g\u1EA7n camera/i.test(msg)) {
+  if (/qua nho|quá nhỏ|tien gan camera|tiến gần camera/i.test(msg)) {
     return {
-      result: "Khu\u00F4n m\u1EB7t qu\u00E1 xa",
+      result: "Khuôn mặt quá xa",
       detail: msg,
-      action: "Ti\u1EBFn g\u1EA7n camera h\u01A1n r\u1ED3i th\u1EED l\u1EA1i",
+      action: "Tiến gần camera hơn rồi thử lại",
     };
   }
 
-  if (/goc nghieng|g\u00F3c nghi\u00EAng|nghieng dau|nghi\u00EAng \u0111\u1EA7u/i.test(msg)) {
+  if (/goc nghieng|góc nghiêng|nghieng dau|nghiêng đầu/i.test(msg)) {
     return {
-      result: "M\u1EB7t \u0111ang b\u1ECB nghi\u00EAng",
+      result: "Mặt đang bị nghiêng",
       detail: msg,
-      action: "Gi\u1EEF \u0111\u1EA7u th\u1EB3ng tr\u01B0\u1EDBc camera r\u1ED3i th\u1EED l\u1EA1i",
+      action: "Giữ đầu thẳng trước camera rồi thử lại",
     };
   }
 
-  if (/ty le khuon mat|t\u1EF7 l\u1EC7 khu\u00F4n m\u1EB7t|khong hop le|kh\u00F4ng h\u1EE3p l\u1EC7/i.test(msg)) {
+  if (/ty le khuon mat|tỷ lệ khuôn mặt|khong hop le|không hợp lệ/i.test(msg)) {
     return {
-      result: "G\u00F3c m\u1EB7t ch\u01B0a ph\u00F9 h\u1EE3p",
+      result: "Góc mặt chưa phù hợp",
       detail: msg,
-      action: "Nh\u00ECn th\u1EB3ng camera v\u00E0 gi\u1EEF tr\u1ECDn khu\u00F4n m\u1EB7t trong khung",
+      action: "Nhìn thẳng camera và giữ trọn khuôn mặt trong khung",
     };
   }
 
-  if (/embedding|trich xuat|tr\u00EDch xu\u1EA5t|khong ro|kh\u00F4ng r\u00F5/i.test(msg)) {
+  if (/embedding|trich xuat|trích xuất|khong ro|không rõ/i.test(msg)) {
     return {
-      result: "\u1EA2nh khu\u00F4n m\u1EB7t ch\u01B0a r\u00F5",
+      result: "Ảnh khuôn mặt chưa rõ",
       detail: msg,
-      action: "Gi\u1EEF y\u00EAn, \u0111\u1EE7 s\u00E1ng v\u00E0 th\u1EED l\u1EA1i",
+      action: "Giữ yên, đủ sáng và thử lại",
     };
   }
 
   return {
-    result: "Kh\u00F3 x\u00E1c th\u1EF1c khu\u00F4n m\u1EB7t",
-    detail: msg || "Vui l\u00F2ng th\u1EED l\u1EA1i.",
-    action: "Gi\u1EEF m\u1EB7t r\u00F5, nh\u00ECn th\u1EB3ng camera r\u1ED3i th\u1EED l\u1EA1i",
+    result: "Khó xác thực khuôn mặt",
+    detail: msg || "Vui lòng thử lại.",
+    action: "Giữ mặt rõ, nhìn thẳng camera rồi thử lại",
   };
 }
 
 function showNotifyFromApi(data, actionLabel) {
   if (data.ok) {
-    const lockerTxt = data.locker_id ? `T\u1EE7 ${data.locker_id}` : "";
-    let detail = lockerTxt ? `\u0110\u00E3 m\u1EDF ${lockerTxt}` : "X\u00E1c th\u1EF1c th\u00E0nh c\u00F4ng";
-    if (data.confidence != null) detail += ` \u00B7 ${data.confidence}%`;
+    const lockerTxt = data.locker_id ? `Tủ ${data.locker_id}` : "";
+    let detail = lockerTxt ? `Đã mở ${lockerTxt}` : "Xác thực thành công";
+    if (data.confidence != null) detail += ` · ${data.confidence}%`;
     setNotify("success", {
-      result: `${actionLabel} th\u00E0nh c\u00F4ng`,
+      result: `${actionLabel} thành công`,
       locker: lockerTxt,
       detail,
       lockerClass: "success",
       detailClass: "success",
-      action: lockerTxt ? "\u0110\u00E3 m\u1EDF t\u1EE7" : "Ho\u00E0n t\u1EA5t",
+      action: lockerTxt ? "Đã mở tủ" : "Hoàn tất",
     });
     return;
   }
@@ -161,14 +161,14 @@ function showNotifyFromApi(data, actionLabel) {
   setNotify("error", {
     result: failure.result,
     detail: failure.detail,
-    action: "Th\u1EED l\u1EA1i",
+    action: "Thử lại",
   });
 }
 
 function captureB64() {
   const w = video.videoWidth;
   const h = video.videoHeight;
-  if (!w || !h) throw new Error("Camera ch\u01B0a s\u1EB5n s\u00E0ng");
+  if (!w || !h) throw new Error("Camera chưa sẵn sàng");
   canvas.width = w;
   canvas.height = h;
   canvas.getContext("2d").drawImage(video, 0, 0, w, h);
@@ -184,7 +184,7 @@ function stopCamera() {
   video.srcObject = null;
   cameraActive = false;
   cameraBox.classList.add("frozen");
-  camStatus.textContent = "\u0110\u00E3 ch\u1EE5p \u1EA3nh";
+  camStatus.textContent = "Đã chụp ảnh";
   updateButtons();
 }
 
@@ -200,8 +200,8 @@ function updateCamUI() {
   cameraBox.classList.remove("frozen");
   camSnapshot.removeAttribute("src");
   camStatus.textContent = faceModelsReady
-    ? "Nh\u00ECn v\u00E0o gi\u1EEFa khung v\u00E0 b\u1EA5m G\u1EEDi/L\u1EA5y \u0111\u1ED3"
-    : "Camera s\u1EB5n s\u00E0ng";
+    ? "Nhìn vào giữa khung và bấm Gửi/Lấy đồ"
+    : "Camera sẵn sàng";
 }
 
 async function resumeCameraAfterAuth() {
@@ -216,7 +216,7 @@ function renderLockers(lockers) {
         <div class="locker-cell ${locker.is_empty ? "empty" : "busy"} ${locker.id === selectedLockerId ? "selected" : ""}"
              data-id="${locker.id}">
           <i class="fa-solid fa-box"></i>
-          <div class="name">T\u1EE7 ${locker.id}</div>
+          <div class="name">Tủ ${locker.id}</div>
           <div class="state">${locker.label}</div>
         </div>`
     )
@@ -238,17 +238,17 @@ function logToHistoryItem(log) {
   let desc = log.action_type;
 
   if (log.action_type === "GUI_DO" && ok) {
-    title = `${ACTION_GUI} th\u00E0nh c\u00F4ng`;
+    title = `${ACTION_GUI} thành công`;
     desc = log.message || "";
   } else if (log.action_type === "LAY_DO" && ok) {
-    title = `${ACTION_LAY} th\u00E0nh c\u00F4ng`;
+    title = `${ACTION_LAY} thành công`;
     desc = log.message || "";
   } else if (log.action_type === "MANUAL" && ok) {
-    title = "M\u1EDF t\u1EE7 th\u1EE7 c\u00F4ng";
+    title = "Mở tủ thủ công";
     desc = log.message || "";
   } else if (!ok) {
-    title = log.status === "SPOOF" ? "C\u1EA3nh b\u00E1o gi\u1EA3 m\u1EA1o" : "X\u00E1c th\u1EF1c th\u1EA5t b\u1EA1i";
-    desc = log.message || "Kh\u00F4ng kh\u1EDBp khu\u00F4n m\u1EB7t";
+    title = log.status === "SPOOF" ? "Cảnh báo giả mạo" : "Xác thực thất bại";
+    desc = log.message || "Không khớp khuôn mặt";
   }
 
   if (log.action_type === "SYSTEM") {
@@ -274,13 +274,13 @@ async function loadHistory(limit = 5) {
     const logs = data.logs || [];
     if (!logs.length) {
       historyList.innerHTML =
-        '<li class="history-item"><div class="history-body"><div class="desc">Ch\u01B0a c\u00F3 ho\u1EA1t \u0111\u1ED9ng</div></div></li>';
+        '<li class="history-item"><div class="history-body"><div class="desc">Chưa có hoạt động</div></div></li>';
       return;
     }
     historyList.innerHTML = logs.map(logToHistoryItem).join("");
   } catch {
     historyList.innerHTML =
-      '<li class="history-item"><div class="history-body"><div class="desc">Kh\u00F4ng t\u1EA3i \u0111\u01B0\u1EE3c l\u1ECBch s\u1EED</div></div></li>';
+      '<li class="history-item"><div class="history-body"><div class="desc">Không tải được lịch sử</div></div></li>';
   }
 }
 
@@ -297,18 +297,18 @@ function updateButtons() {
 
 async function loadFaceModels() {
   if (typeof faceapi === "undefined") {
-    showToast(false, "Kh\u00F4ng t\u1EA3i \u0111\u01B0\u1EE3c th\u01B0 vi\u1EC7n nh\u1EADn di\u1EC7n");
+    showToast(false, "Không tải được thư viện nhận diện");
     return;
   }
 
   try {
-    camStatus.textContent = "\u0110ang t\u1EA3i AI ph\u00E1t hi\u1EC7n m\u1EB7t...";
+    camStatus.textContent = "Đang tải AI phát hiện mặt...";
     await faceapi.nets.tinyFaceDetector.loadFromUri(FACE_MODEL_URL);
     faceModelsReady = true;
-    if (cameraActive) camStatus.textContent = "Nh\u00ECn v\u00E0o gi\u1EEFa khung v\u00E0 b\u1EA5m G\u1EEDi/L\u1EA5y \u0111\u1ED3";
+    if (cameraActive) camStatus.textContent = "Nhìn vào giữa khung và bấm Gửi/Lấy đồ";
   } catch (e) {
     faceModelsReady = false;
-    showToast(false, "Kh\u00F4ng t\u1EA3i model: " + e.message);
+    showToast(false, "Không tải model: " + e.message);
   }
 
   updateButtons();
@@ -343,7 +343,7 @@ function stopAutoScan() {
 function cancelAutoScan() {
   stopAutoScan();
   setNotify("idle", { result: IDLE_TITLE, detail: IDLE_DETAIL });
-  camStatus.textContent = "Camera s\u1EB5n s\u00E0ng";
+  camStatus.textContent = "Camera sẵn sàng";
 }
 
 async function tickAutoScan() {
@@ -358,7 +358,7 @@ async function tickAutoScan() {
     if (!detection || !isFaceCentered(detection)) {
       stableFrames = 0;
       cameraBox.classList.remove("face-ready");
-      const reason = detection ? "\u0110\u01B0a m\u1EB7t v\u00E0o gi\u1EEFa khung" : "Ch\u01B0a th\u1EA5y khu\u00F4n m\u1EB7t";
+      const reason = detection ? "Đưa mặt vào giữa khung" : "Chưa thấy khuôn mặt";
       scanHint.textContent = reason;
       camStatus.textContent = reason;
       return;
@@ -366,8 +366,8 @@ async function tickAutoScan() {
 
     stableFrames += 1;
     const pct = Math.min(100, Math.round((stableFrames / STABLE_NEEDED) * 100));
-    scanHint.textContent = `Gi\u1EEF y\u00EAn... ${pct}%`;
-    camStatus.textContent = `Gi\u1EEF y\u00EAn \u0111\u1EC3 t\u1EF1 ch\u1EE5p ${pct}%`;
+    scanHint.textContent = `Giữ yên... ${pct}%`;
+    camStatus.textContent = `Giữ yên để tự chụp ${pct}%`;
 
     if (stableFrames >= STABLE_NEEDED - 1) {
       cameraBox.classList.add("face-ready");
@@ -386,18 +386,18 @@ async function tickAutoScan() {
 function startAutoScan(url, actionLabel) {
   if (!cameraActive) {
     setNotify("error", {
-      result: "Camera ch\u01B0a s\u1EB5n",
-      detail: "\u0110ang b\u1EADt l\u1EA1i camera",
-      action: "\u0110\u1EE3i",
+      result: "Camera chưa sẵn",
+      detail: "Đang bật lại camera",
+      action: "Đợi",
     });
     return;
   }
 
   if (!faceModelsReady) {
     setNotify("error", {
-      result: "AI ch\u01B0a s\u1EB5n",
-      detail: "\u0110ang t\u1EA3i nh\u1EADn di\u1EC7n khu\u00F4n m\u1EB7t",
-      action: "\u0110\u1EE3i",
+      result: "AI chưa sẵn",
+      detail: "Đang tải nhận diện khuôn mặt",
+      action: "Đợi",
     });
     return;
   }
@@ -415,12 +415,12 @@ function startAutoScan(url, actionLabel) {
   else btnLayDo.classList.add("scanning");
 
   setNotify("idle", {
-    result: "\u0110ang qu\u00E9t",
-    detail: "Gi\u1EEF m\u1EB7t \u1EDF gi\u1EEFa khung",
-    action: "H\u1EE7y qu\u00E9t",
+    result: "Đang quét",
+    detail: "Giữ mặt ở giữa khung",
+    action: "Hủy quét",
   });
 
-  camStatus.textContent = "\u0110\u01B0a khu\u00F4n m\u1EB7t v\u00E0o gi\u1EEFa khung";
+  camStatus.textContent = "Đưa khuôn mặt vào giữa khung";
   updateButtons();
   scanTimer = setInterval(tickAutoScan, SCAN_INTERVAL_MS);
 }
@@ -445,18 +445,18 @@ async function refreshStatus() {
     const espText = document.getElementById("espText");
     if (data.esp_connected) {
       espEl.classList.remove("off");
-      espText.textContent = "\u0110\u00E3 k\u1EBFt n\u1ED1i";
+      espText.textContent = "Đã kết nối";
     } else {
       espEl.classList.add("off");
-      espText.textContent = "M\u1EA5t k\u1EBFt n\u1ED1i";
+      espText.textContent = "Mất kết nối";
     }
 
     updateButtons();
   } catch {
     setNotify("error", {
-      result: "M\u1EA5t k\u1EBFt n\u1ED1i",
-      detail: "Kh\u00F4ng li\u00EAn l\u1EA1c \u0111\u01B0\u1EE3c server",
-      action: "Ki\u1EC3m tra",
+      result: "Mất kết nối",
+      detail: "Không liên lạc được server",
+      action: "Kiểm tra",
     });
   }
 }
@@ -470,18 +470,18 @@ async function submitFaceApi(url, actionLabel) {
     imageB64 = captureAndStopCamera();
   } catch (e) {
     setNotify("error", {
-      result: "Kh\u00F4ng ch\u1EE5p \u0111\u01B0\u1EE3c",
-      detail: e.message || "B\u1EADt l\u1EA1i camera r\u1ED3i th\u1EED",
-      action: "Th\u1EED l\u1EA1i",
+      result: "Không chụp được",
+      detail: e.message || "Bật lại camera rồi thử",
+      action: "Thử lại",
     });
     await resumeCameraAfterAuth();
     return;
   }
 
   setNotify("loading", {
-    result: "\u0110ang x\u00E1c th\u1EF1c",
-    detail: "\u0110ang ph\u00E2n t\u00EDch \u1EA3nh",
-    action: "\u0110\u1EE3i",
+    result: "Đang xác thực",
+    detail: "Đang phân tích ảnh",
+    action: "Đợi",
   });
 
   try {
@@ -496,9 +496,9 @@ async function submitFaceApi(url, actionLabel) {
     return data;
   } catch (e) {
     setNotify("error", {
-      result: "L\u1ED7i h\u1EC7 th\u1ED1ng",
-      detail: e.message || "Vui l\u00F2ng th\u1EED l\u1EA1i",
-      action: "Th\u1EED l\u1EA1i",
+      result: "Lỗi hệ thống",
+      detail: e.message || "Vui lòng thử lại",
+      action: "Thử lại",
     });
   } finally {
     await resumeCameraAfterAuth();
@@ -524,8 +524,8 @@ async function startCamera() {
     };
   } catch (e) {
     cameraActive = false;
-    showToast(false, "Kh\u00F4ng m\u1EDF \u0111\u01B0\u1EE3c camera: " + e.message);
-    camStatus.textContent = "L\u1ED7i camera";
+    showToast(false, "Không mở được camera: " + e.message);
+    camStatus.textContent = "Lỗi camera";
   }
 }
 

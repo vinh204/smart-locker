@@ -9,12 +9,17 @@ from face_utils import (
     base64_to_cv2,
     capture_face_embedding,
     distance_to_confidence_percent,
-    find_matching_deposit,
+    find_all_matching_deposits,
     is_spoof_rejection,
 )
 from locker_service import open_locker
 
 router = APIRouter(prefix="/face", tags=["Tủ khóa & Khuôn mặt"])
+
+CODE_NO_EMPTY_LOCKERS = "NO_EMPTY_LOCKERS"
+CODE_ALREADY_DEPOSITED = "ALREADY_DEPOSITED"
+CODE_PICK_LOCKER = "PICK_LOCKER"
+CODE_NOT_DEPOSITED = "NOT_DEPOSITED"
 
 
 async def _read_image(file: UploadFile | None, image_b64: str | None):
@@ -28,6 +33,33 @@ async def _read_image(file: UploadFile | None, image_b64: str | None):
     if image_b64:
         return base64_to_cv2(image_b64)
     return None
+
+
+async def _embedding_from_request(
+    file: UploadFile | None,
+    image_b64: str | None,
+    action: str,
+) -> tuple[bool, dict | None, list[float] | None]:
+    img = await _read_image(file, image_b64)
+    if img is None:
+        db.log_action(action, "ERROR", message="Thiếu ảnh")
+        return False, {
+            "ok": False,
+            "message": "Vui lòng bật camera và thử lại",
+        }, None
+
+    ok, msg, embedding = capture_face_embedding(img)
+    if not ok or embedding is None:
+        status = "SPOOF" if is_spoof_rejection(msg) else "FAILED"
+        db.log_action(action, status, message=msg)
+        return False, {"ok": False, "message": msg}, None
+
+    return True, None, embedding
+
+
+def _fail(action: str, status: str, code: str, message: str, **extra) -> dict:
+    db.log_action(action, status, message=message)
+    return {"ok": False, "code": code, "message": message, **extra}
 
 
 @router.get("/status")
@@ -59,7 +91,7 @@ async def manual_open_locker(locker_id: int):
         return {"ok": False, "message": "Không tìm thấy tủ"}
     opened = open_locker(locker_id)
     info = lockers[locker_id]
-    db.log_action("MANUAL", "SUCCESS", message=f"Mở tủ {locker_id} — {info['label']}")
+    db.log_action("MANUAL", "SUCCESS", message=f"Mở tủ {locker_id} - {info['label']}")
     return {
         "ok": True,
         "message": f"Đã gửi lệnh mở tủ {locker_id}",
@@ -72,39 +104,51 @@ async def manual_open_locker(locker_id: int):
 async def gui_do(
     file: UploadFile | None = File(None),
     image: str | None = Form(None),
+    intent: str | None = Form(None),
 ):
+    """
+    Gửi đồ. intent=new — mở tủ mới dù đã có phiên gửi trước đó.
+    """
     action = "GUI_DO"
     st = db.get_locker_status()
+
     if not st["can_gui_do"]:
-        msg = "Hiện không còn tủ trống"
-        db.log_action(action, "FAILED", message=msg)
-        return {"ok": False, "message": msg}
+        return _fail(
+            action,
+            "FAILED",
+            CODE_NO_EMPTY_LOCKERS,
+            "Hiện không còn tủ trống. Vui lòng lấy đồ trước khi gửi tiếp.",
+        )
 
-    img = await _read_image(file, image)
-    if img is None:
-        db.log_action(action, "ERROR", message="Thiếu ảnh")
-        return {"ok": False, "message": "Vui lòng bật camera và thử lại"}
+    ok_embed, err, embedding = await _embedding_from_request(file, image, action)
+    if not ok_embed:
+        return err
 
-    ok, msg, embedding = capture_face_embedding(img)
-    if not ok or embedding is None:
-        status = "SPOOF" if is_spoof_rejection(msg) else "FAILED"
-        db.log_action(action, status, message=msg)
-        return {"ok": False, "message": msg}
+    active = db.get_active_deposits()
+    matches, _ = find_all_matching_deposits(embedding, active)
+    if matches and (intent or "").strip().lower() != "new":
+        locker_ids = [int(m["locker_id"]) for m in matches]
+        return _fail(
+            action,
+            "PENDING",
+            CODE_ALREADY_DEPOSITED,
+            "Bạn đã gửi đồ trước đó. Bạn muốn lấy đồ hay mở tủ mới?",
+            locker_ids=locker_ids,
+            choices=["lay_do", "gui_do_new"],
+        )
 
     started = db.start_deposit(embedding)
     if started is None:
-        msg = "Hiện không còn tủ trống"
-        db.log_action(action, "FAILED", message=msg)
-        return {"ok": False, "message": msg}
+        return _fail(
+            action,
+            "FAILED",
+            CODE_NO_EMPTY_LOCKERS,
+            "Hiện không còn tủ trống",
+        )
 
     deposit_id, locker_id = started
     opened = open_locker(locker_id)
-
-    db.log_action(
-        action,
-        "SUCCESS",
-        message=f"Gửi đồ thành công — tủ {locker_id}",
-    )
+    db.log_action(action, "SUCCESS", message=f"Gửi đồ thành công - tủ {locker_id}")
     return {
         "ok": True,
         "message": f"Gửi đồ thành công. Mở tủ số {locker_id}. Vui lòng đặt đồ vào tủ.",
@@ -119,57 +163,97 @@ async def gui_do(
 async def lay_do(
     file: UploadFile | None = File(None),
     image: str | None = Form(None),
+    locker_id: int | None = Form(None),
+    open_all: bool = Form(False),
 ):
+    """
+    Lấy đồ. locker_id — mở một tủ khi có nhiều phiên; open_all=true — mở tất cả tủ của bạn.
+    """
     action = "LAY_DO"
     active = db.get_active_deposits()
     if not active:
-        msg = "Chưa có ai gửi đồ trong hệ thống"
-        db.log_action(action, "FAILED", message=msg)
-        return {"ok": False, "message": msg}
+        return _fail(
+            action,
+            "FAILED",
+            CODE_NOT_DEPOSITED,
+            "Bạn chưa thực hiện gửi đồ",
+        )
 
-    img = await _read_image(file, image)
-    if img is None:
-        db.log_action(action, "ERROR", message="Thiếu ảnh")
-        return {"ok": False, "message": "Vui lòng bật camera và thử lại"}
+    ok_embed, err, embedding = await _embedding_from_request(file, image, action)
+    if not ok_embed:
+        return err
 
-    ok, msg, embedding = capture_face_embedding(img)
-    if not ok or embedding is None:
-        status = "SPOOF" if is_spoof_rejection(msg) else "FAILED"
-        db.log_action(action, status, message=msg)
-        return {"ok": False, "message": msg}
-
-    matched, distance = find_matching_deposit(embedding, active)
+    matches, distance = find_all_matching_deposits(embedding, active)
     confidence = distance_to_confidence_percent(distance)
 
-    if matched is None:
-        if confidence <= 0:
-            msg = "Không tìm thấy phiên gửi đồ nào trong hệ thống."
-        else:
-            msg = (
-                f"Khuôn mặt không khớp với ai đã gửi đồ (độ tin cậy {confidence}%, chưa đủ). "
-                "Hãy dùng đúng người đã gửi đồ trước đó."
+    if not matches:
+        return _fail(
+            action,
+            "FAILED",
+            CODE_NOT_DEPOSITED,
+            "Bạn chưa thực hiện gửi đồ",
+            confidence=confidence,
+        )
+
+    if len(matches) > 1 and locker_id is None and not open_all:
+        locker_ids = [int(m["locker_id"]) for m in matches]
+        return _fail(
+            action,
+            "PENDING",
+            CODE_PICK_LOCKER,
+            "Bạn đang sử dụng nhiều tủ. Chọn tủ cần mở hoặc mở tất cả.",
+            locker_ids=locker_ids,
+            choices=["pick_locker", "open_all"],
+            confidence=confidence,
+        )
+
+    if open_all:
+        targets = matches
+    elif locker_id is not None:
+        targets = [m for m in matches if int(m["locker_id"]) == locker_id]
+        if not targets:
+            return _fail(
+                action,
+                "FAILED",
+                CODE_NOT_DEPOSITED,
+                f"Bạn chưa gửi đồ vào tủ {locker_id}",
+                confidence=confidence,
             )
-        db.log_action(action, "FAILED", confidence=confidence, message=msg)
-        return {"ok": False, "message": msg, "confidence": confidence}
+    else:
+        targets = matches[:1]
 
-    locker_id = db.complete_deposit(matched["id"])
-    if locker_id is None:
-        msg = "Không tìm thấy tủ tương ứng với phiên gửi đồ này"
-        db.log_action(action, "FAILED", message=msg)
-        return {"ok": False, "message": msg}
+    opened_lockers: list[int] = []
+    for dep in targets:
+        lid = db.complete_deposit(dep["id"])
+        if lid is None:
+            continue
+        open_locker(lid)
+        opened_lockers.append(lid)
 
-    opened = open_locker(locker_id)
-    db.log_action(
-        action,
-        "SUCCESS",
-        confidence=confidence,
-        message=f"Lấy đồ thành công — tủ {locker_id}",
-    )
+    if not opened_lockers:
+        return _fail(
+            action,
+            "FAILED",
+            CODE_NOT_DEPOSITED,
+            "Không tìm thấy phiên gửi đồ hợp lệ",
+            confidence=confidence,
+        )
+
+    if len(opened_lockers) == 1:
+        lid = opened_lockers[0]
+        msg = f"Lấy đồ thành công. Mở tủ số {lid}."
+        log_msg = f"Lấy đồ thành công - tủ {lid}"
+    else:
+        ids = ", ".join(str(x) for x in sorted(opened_lockers))
+        msg = f"Lấy đồ thành công. Đã mở tủ: {ids}."
+        log_msg = f"Lấy đồ thành công - tủ {ids}"
+
+    db.log_action(action, "SUCCESS", confidence=confidence, message=log_msg)
     return {
         "ok": True,
-        "message": f"Lấy đồ thành công. Mở tủ số {locker_id}.",
-        "deposit_id": matched["id"],
-        "locker_id": locker_id,
+        "message": msg,
+        "locker_id": opened_lockers[0] if len(opened_lockers) == 1 else None,
+        "locker_ids": opened_lockers,
         "confidence": confidence,
-        "locker_opened": opened,
+        "locker_opened": True,
     }

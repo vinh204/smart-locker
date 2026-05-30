@@ -9,7 +9,7 @@ Chỉ gồm **2 nút** trên giao diện web:
 | **Gửi đồ** | `POST /face/gui-do` | Chỉ xác thực + ghi log (không đăng ký khuôn mặt mới) |
 | **Lấy đồ** | `POST /face/lay-do` | Chỉ xác thực + ghi log |
 
-Khuôn mặt phải có sẵn trong `face_db/<tên_thư_mục>/` (ảnh `.jpg`). Web không tạo hồ sơ mới.
+Web xử lý khuôn mặt trực tiếp từ ảnh camera, không dùng thư mục `face_db/`.
 
 Chưa có ESP32, mở tủ, nhật ký trên web — làm ở bước sau.
 
@@ -60,10 +60,11 @@ Server gọi: `GET http://<ESP_IP>/update?line1=...&line2=...`
 
 ## API chính
 
-- **POST `/check_duplicate`** – Anti-spoofing, góc nghiêng ≤ 8°, tỷ lệ mặt 0.6–1.25, kiểm tra trùng trong `face_db/`
-- **POST `/register`** – `name` + ảnh (form `image` base64 hoặc `file`)
-- **POST `/verify`** – Nhận diện (ngưỡng cosine **0.68**), gửi lệnh mở tủ tới ESP32
-- **GET `/logs`** – 50 nhật ký gần nhất
+- **GET `/face/status`** – Trạng thái tủ, số ô trống và danh sách các tủ
+- **POST `/face/gui-do`** – Chụp ảnh, chống giả mạo, trích xuất embedding và gán tủ trống
+- **POST `/face/lay-do`** – Chụp ảnh, so khớp embedding với các phiên gửi đồ đang hoạt động
+- **GET `/face/logs`** – Lấy nhật ký hoạt động gần nhất
+- **POST `/face/open-locker/{locker_id}`** – Mở tủ thủ công từ panel điều khiển
 
 ## Mô phỏng không có ESP32
 

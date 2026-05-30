@@ -518,6 +518,74 @@
     .toast.err { background: #7f1d1d; border: 1px solid var(--red); }
 
     canvas { display: none; }
+
+    .choice-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(8, 12, 20, 0.72);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+      padding: 1rem;
+    }
+    .choice-overlay.show { display: flex; }
+    .choice-panel {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 1.25rem 1.35rem;
+      max-width: 420px;
+      width: 100%;
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+    }
+    .choice-panel h3 {
+      font-size: 1.05rem;
+      margin-bottom: 0.5rem;
+      color: var(--text);
+    }
+    .choice-panel p {
+      font-size: 0.9rem;
+      color: var(--muted);
+      margin-bottom: 1rem;
+      line-height: 1.45;
+    }
+    .choice-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 0.55rem;
+    }
+    .choice-actions button,
+    .choice-locker-grid button {
+      border: none;
+      border-radius: 10px;
+      padding: 0.75rem 1rem;
+      font-size: 0.92rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      min-height: 3rem;
+      line-height: 1.2;
+      text-align: center;
+    }
+    .choice-actions .btn-primary { background: var(--blue); color: #fff; }
+    .choice-actions .btn-success { background: var(--green); color: #0c1220; }
+    .choice-actions .btn-muted { background: #243044; color: var(--text); }
+    .choice-locker-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+    .choice-locker-grid button {
+      background: var(--blue-dim);
+      color: var(--text);
+      border: 1px solid var(--blue);
+      width: 100%;
+    }
   </style>
 </head>
 <body>
@@ -624,6 +692,14 @@
   </div>
 
   <div id="toast" class="toast"></div>
+  <div id="choiceOverlay" class="choice-overlay" role="dialog" aria-modal="true">
+    <div class="choice-panel">
+      <h3 id="choiceTitle">Lựa chọn</h3>
+      <p id="choiceMessage"></p>
+      <div id="choiceLockerGrid" class="choice-locker-grid" style="display:none"></div>
+      <div id="choiceActions" class="choice-actions"></div>
+    </div>
+  </div>
   <canvas id="snap"></canvas>
 
   <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.14/dist/face-api.js"></script>
@@ -646,8 +722,15 @@
     const notifyActionText = notifyAction.querySelector("span");
     const historyList = document.getElementById("historyList");
     const toast = document.getElementById("toast");
+    const choiceOverlay = document.getElementById("choiceOverlay");
+    const choiceTitle = document.getElementById("choiceTitle");
+    const choiceMessage = document.getElementById("choiceMessage");
+    const choiceLockerGrid = document.getElementById("choiceLockerGrid");
+    const choiceActions = document.getElementById("choiceActions");
 
     let lockerState = { can_gui_do: false, can_lay_do: false, lockers: [] };
+    let lockerFullNoticeActive = false;
+    let lastCaptureB64 = null;
     let selectedLockerId = null;
     let mediaStream = null;
     let cameraActive = false;
@@ -752,6 +835,31 @@
       notifyActionText.textContent = opts.action ?? "Chờ thao tác";
     }
 
+    function syncLockerAvailabilityNotice() {
+      if (scanMode || notifyCard.classList.contains("loading") || choiceOverlay.classList.contains("show")) {
+        return;
+      }
+
+      if (!lockerState.can_gui_do) {
+        lockerFullNoticeActive = true;
+        setNotify("error", {
+          result: "Hết tủ trống",
+          detail: "Hiện không còn tủ trống. Vui lòng lấy đồ trước khi gửi tiếp.",
+          action: lockerState.can_lay_do ? "Bạn vẫn có thể bấm Lấy đồ" : "Chờ có tủ trống",
+        });
+        return;
+      }
+
+      if (lockerFullNoticeActive) {
+        lockerFullNoticeActive = false;
+        setNotify("idle", {
+          result: "Xin chào!",
+          detail: "Nhấn Gửi đồ hoặc Lấy đồ",
+          action: "Sẵn sàng thao tác",
+        });
+      }
+    }
+
     function describeFaceAuthError(message) {
       const msg = String(message || "").trim();
 
@@ -768,6 +876,14 @@
           result: "Hết tủ trống",
           detail: msg,
           action: "Chờ có tủ trống hoặc lấy đồ trước",
+        };
+      }
+
+      if (/chua thuc hien gui|chưa thực hiện gửi/i.test(msg)) {
+        return {
+          result: "Chưa gửi đồ",
+          detail: msg,
+          action: "Bấm Gửi đồ trước khi lấy",
         };
       }
 
@@ -832,6 +948,153 @@
         detail: msg || "Vui lòng thử lại.",
         action: "Giữ mặt rõ, nhìn thẳng camera rồi thử lại",
       };
+    }
+
+    function hideChoiceOverlay() {
+      choiceOverlay.classList.remove("show");
+      choiceLockerGrid.style.display = "none";
+      choiceLockerGrid.innerHTML = "";
+      choiceActions.innerHTML = "";
+    }
+
+    function showChoiceOverlay(title, message, buttons, lockerButtons) {
+      choiceTitle.textContent = title;
+      choiceMessage.textContent = message;
+      choiceActions.innerHTML = "";
+      choiceLockerGrid.innerHTML = "";
+      if (lockerButtons?.length) {
+        choiceLockerGrid.style.display = "grid";
+        lockerButtons.forEach((lb) => choiceLockerGrid.appendChild(lb));
+      } else {
+        choiceLockerGrid.style.display = "none";
+      }
+      buttons.forEach((btn) => choiceActions.appendChild(btn));
+      choiceOverlay.classList.add("show");
+    }
+
+    function makeChoiceBtn(label, className, onClick) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = className;
+      b.textContent = label;
+      b.onclick = () => {
+        hideChoiceOverlay();
+        onClick();
+      };
+      return b;
+    }
+
+    async function submitWithCapture(url, extraFields) {
+      if (!lastCaptureB64) {
+        setNotify("error", {
+          result: "Thiếu ảnh xác thực",
+          detail: "Vui lòng quét khuôn mặt lại",
+          action: "Bấm Gửi đồ hoặc Lấy đồ",
+        });
+        await resumeCameraAfterAuth();
+        return null;
+      }
+      setNotify("loading", {
+        result: "Đang xử lý…",
+        locker: "",
+        detail: "Hệ thống đang thực hiện lựa chọn của bạn",
+        action: "Vui lòng đợi",
+      });
+      const fd = new FormData();
+      fd.append("image", lastCaptureB64);
+      if (extraFields) {
+        Object.entries(extraFields).forEach(([k, v]) => fd.append(k, String(v)));
+      }
+      try {
+        const res = await fetch(url, { method: "POST", body: fd });
+        const data = await res.json();
+        return data;
+      } catch (e) {
+        setNotify("error", {
+          result: "Lỗi hệ thống",
+          detail: e.message,
+          action: "Thử lại",
+        });
+        return null;
+      }
+    }
+
+    async function handleAuthChoice(data, actionLabel) {
+      if (data.code === "ALREADY_DEPOSITED") {
+        const lockers = (data.locker_ids || []).join(", ");
+        showChoiceOverlay(
+          "Bạn đã gửi đồ trước đó",
+          data.message || `Bạn đang dùng tủ: ${lockers}. Bạn muốn lấy đồ hay mở tủ mới?`,
+          [
+            makeChoiceBtn("Lấy đồ", "btn-success", async () => {
+              const r = await submitWithCapture("/face/lay-do", {});
+              if (r) await finishAuthResponse(r, "Lấy đồ");
+            }),
+            makeChoiceBtn("Mở tủ mới (gửi đồ thêm)", "btn-primary", async () => {
+              const r = await submitWithCapture("/face/gui-do", { intent: "new" });
+              if (r) await finishAuthResponse(r, "Gửi đồ");
+            }),
+            makeChoiceBtn("Hủy", "btn-muted", async () => {
+              setNotify("idle", {
+                detail: "Đã hủy. Bấm Gửi đồ hoặc Lấy đồ để thử lại",
+              });
+              await resumeCameraAfterAuth();
+            }),
+          ]
+        );
+        setNotify("idle", {
+          result: "Cần lựa chọn",
+          detail: data.message,
+          action: "Chọn thao tác trong hộp thoại",
+        });
+        return true;
+      }
+
+      if (data.code === "PICK_LOCKER") {
+        const ids = data.locker_ids || [];
+        const lockerBtns = ids.map((id) =>
+          makeChoiceBtn(`Tủ ${id}`, "", async () => {
+            const r = await submitWithCapture("/face/lay-do", { locker_id: id });
+            if (r) await finishAuthResponse(r, "Lấy đồ");
+          })
+        );
+        showChoiceOverlay(
+          "Chọn tủ cần mở",
+          data.message || "Bạn đang sử dụng nhiều tủ. Chọn một tủ hoặc mở tất cả.",
+          [
+            makeChoiceBtn("Mở tất cả tủ của tôi", "btn-success", async () => {
+              const r = await submitWithCapture("/face/lay-do", { open_all: "true" });
+              if (r) await finishAuthResponse(r, "Lấy đồ");
+            }),
+            makeChoiceBtn("Hủy", "btn-muted", async () => {
+              setNotify("idle", { detail: "Đã hủy lấy đồ" });
+              await resumeCameraAfterAuth();
+            }),
+          ],
+          lockerBtns
+        );
+        setNotify("idle", {
+          result: "Cần chọn tủ",
+          detail: data.message,
+          action: "Chọn tủ trong hộp thoại",
+        });
+        return true;
+      }
+
+      return false;
+    }
+
+    async function finishAuthResponse(data, actionLabel) {
+      if (!data.ok && (await handleAuthChoice(data, actionLabel))) {
+        return data;
+      }
+      showNotifyFromApi(data, actionLabel);
+      if (data.locker_id) selectedLockerId = data.locker_id;
+      else if (data.locker_ids?.length) selectedLockerId = data.locker_ids[0];
+      await refreshStatus();
+      await loadHistory();
+      await resumeCameraAfterAuth();
+      return data;
     }
 
     function showNotifyFromApi(data, actionLabel) {
@@ -954,8 +1217,8 @@
         return;
       }
       const ready = cameraActive && faceModelsReady;
-      btnGuiDo.disabled = !ready || !lockerState.can_gui_do;
-      btnLayDo.disabled = !ready || !lockerState.can_lay_do;
+      btnGuiDo.disabled = !ready;
+      btnLayDo.disabled = !ready;
     }
 
     async function loadFaceModels() {
@@ -1041,6 +1304,14 @@
     }
 
     function startAutoScan(url, actionLabel) {
+      if (url === "/face/gui-do" && !lockerState.can_gui_do) {
+        setNotify("error", {
+          result: "Hết tủ trống",
+          detail: "Hiện không còn tủ trống. Vui lòng lấy đồ trước khi gửi tiếp.",
+          action: "Chờ có tủ trống hoặc lấy đồ",
+        });
+        return;
+      }
       if (!cameraActive) {
         setNotify("error", {
           result: "Camera chưa bật",
@@ -1102,7 +1373,9 @@
           espText.textContent = "Mất kết nối";
         }
         updateButtons();
+        syncLockerAvailabilityNotice();
       } catch {
+        lockerFullNoticeActive = false;
         setNotify("error", {
           result: "Lỗi kết nối",
           locker: "",
@@ -1118,6 +1391,7 @@
       let imageB64;
       try {
         imageB64 = captureAndStopCamera();
+        lastCaptureB64 = imageB64;
       } catch (e) {
         setNotify("error", {
           result: "Không chụp được ảnh",
@@ -1138,10 +1412,10 @@
         fd.append("image", imageB64);
         const res = await fetch(url, { method: "POST", body: fd });
         const data = await res.json();
-        showNotifyFromApi(data, actionLabel);
-        if (data.locker_id) selectedLockerId = data.locker_id;
-        await refreshStatus();
-        await loadHistory();
+        if (!data.ok && (await handleAuthChoice(data, actionLabel))) {
+          return data;
+        }
+        await finishAuthResponse(data, actionLabel);
         return data;
       } catch (e) {
         setNotify("error", {
@@ -1149,7 +1423,6 @@
           detail: e.message,
           action: "Bấm Gửi đồ hoặc Lấy đồ để thử lại",
         });
-      } finally {
         await resumeCameraAfterAuth();
       }
     }

@@ -1,7 +1,6 @@
 import math
 import os
 import tempfile
-from pathlib import Path
 
 import cv2
 import numpy as np
@@ -17,9 +16,6 @@ from config import (
     MIN_FACE_WIDTH_IMG_RATIO,
     VERIFY_THRESHOLD,
 )
-
-FACE_DB_DIR = Path(__file__).resolve().parent / "face_db"
-FACE_DB_DIR.mkdir(exist_ok=True)
 
 MODEL_NAME = "ArcFace"
 
@@ -217,17 +213,28 @@ def find_matching_deposit(
     query_embedding: list[float],
     active_deposits: list[dict],
 ) -> tuple[dict | None, float]:
-    if not active_deposits:
-        return None, 1.0
+    matches, best_dist = find_all_matching_deposits(query_embedding, active_deposits)
+    if not matches:
+        return None, best_dist
+    return matches[0], best_dist
 
-    best_dep = None
+
+def find_all_matching_deposits(
+    query_embedding: list[float],
+    active_deposits: list[dict],
+) -> tuple[list[dict], float]:
+    """Tất cả phiên gửi đồ khớp người (distance <= ngưỡng), sắp theo độ khớp."""
+    if not active_deposits:
+        return [], 1.0
+
+    scored: list[tuple[dict, float]] = []
     best_dist = float("inf")
     for dep in active_deposits:
         dist = cosine_distance(query_embedding, dep["embedding"])
         if dist < best_dist:
             best_dist = dist
-            best_dep = dep
+        if dist <= VERIFY_THRESHOLD:
+            scored.append((dep, dist))
 
-    if best_dep is None or best_dist > VERIFY_THRESHOLD:
-        return None, best_dist
-    return best_dep, best_dist
+    scored.sort(key=lambda x: x[1])
+    return [dep for dep, _ in scored], best_dist
