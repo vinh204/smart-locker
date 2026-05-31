@@ -1,3 +1,12 @@
+const IDLE_TITLE = "Xin chào!";
+const IDLE_DETAIL =
+  "Bấm Gửi đồ hoặc Lấy đồ — hệ thống tự chụp khi mặt ở giữa khung";
+const IDLE_ACTION = "Sẵn sàng thao tác";
+const STABLE_NEEDED = 6;
+const SCAN_INTERVAL_MS = 120;
+const FACE_MODEL_URL =
+  "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.14/model";
+
 const video = document.getElementById("cam");
 const canvas = document.getElementById("snap");
 const cameraBox = document.getElementById("cameraBox");
@@ -6,26 +15,27 @@ const camStatus = document.getElementById("camStatus");
 const btnGuiDo = document.getElementById("btnGuiDo");
 const btnLayDo = document.getElementById("btnLayDo");
 const lockerGrid = document.getElementById("lockerGrid");
-const notifyCard = document.getElementById("notifyBar");
-const notifyIcon = document.getElementById("notifyIconMain");
-const notifyIconI = document.getElementById("notifyIconIMain");
-const notifyResult = document.getElementById("notifyResultMain");
-const notifyLocker = document.getElementById("notifyLockerMain");
-const notifyDetail = document.getElementById("notifyDetailMain");
+const notifyCard = document.getElementById("notifyCard");
+const notifyIcon = notifyCard.querySelector(".notify-icon");
+const notifyIconI = notifyIcon.querySelector("i");
+const notifyResult = notifyCard.querySelector(".notify-result");
+const notifyLocker = notifyCard.querySelector(".notify-locker");
+const notifyDetail = notifyCard.querySelector(".notify-detail-text");
+const notifyAction = notifyCard.querySelector(".btn-notify");
+const notifyActionText = notifyAction.querySelector("span");
 const historyList = document.getElementById("historyList");
 const toast = document.getElementById("toast");
+const choiceOverlay = document.getElementById("choiceOverlay");
+const choiceTitle = document.getElementById("choiceTitle");
+const choiceMessage = document.getElementById("choiceMessage");
+const choiceLockerGrid = document.getElementById("choiceLockerGrid");
+const choiceActions = document.getElementById("choiceActions");
 const scanHint = document.getElementById("scanHint");
-
-const IDLE_TITLE = "Xin chào!";
-const IDLE_DETAIL =
-  "Vui lòng nhìn vào giữa khung và bấm Gửi đồ hoặc Lấy đồ";
-const ACTION_GUI = "Gửi đồ";
-const ACTION_LAY = "Lấy đồ";
-const FACE_MODEL_URL = "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.14/model";
-const STABLE_NEEDED = 6;
-const SCAN_INTERVAL_MS = 120;
+const clock = document.getElementById("clock");
 
 let lockerState = { can_gui_do: false, can_lay_do: false, lockers: [] };
+let lockerFullNoticeActive = false;
+let lastCaptureB64 = null;
 let selectedLockerId = null;
 let mediaStream = null;
 let cameraActive = false;
@@ -36,13 +46,14 @@ let stableFrames = 0;
 
 function formatTime(isoOrStr) {
   if (!isoOrStr) return "—";
-  const d = new Date(String(isoOrStr).replace(" ", "T"));
-  if (Number.isNaN(d.getTime())) return String(isoOrStr).slice(11, 19) || String(isoOrStr);
+  const value = String(isoOrStr);
+  const d = new Date(value.replace(" ", "T"));
+  if (Number.isNaN(d.getTime())) return value.slice(11, 19) || value;
   return d.toTimeString().slice(0, 8);
 }
 
 function updateClock() {
-  document.getElementById("clock").textContent = new Date().toTimeString().slice(0, 8);
+  clock.textContent = new Date().toTimeString().slice(0, 8);
 }
 
 function showToast(ok, msg) {
@@ -72,25 +83,135 @@ function setNotify(state, opts = {}) {
 
   notifyCard.className = "notify-strip " + state;
   notifyIcon.className = "notify-icon " + state;
+  notifyAction.className = "btn-notify " + state;
   notifyResult.className = "notify-result val-" + tone;
   notifyLocker.className = "notify-locker val-" + lockerTone;
-  notifyDetail.className = "notify-detail-text" + (detailTone ? " val-" + detailTone : "");
+  notifyDetail.className =
+    "notify-detail-text" + (detailTone ? " val-" + detailTone : "");
   notifyIconI.className = "fa-solid " + (icons[state] || icons.idle);
 
   notifyResult.textContent = opts.result ?? IDLE_TITLE;
   notifyLocker.textContent = lockerText;
   notifyLocker.style.display = lockerText ? "inline-flex" : "none";
   notifyDetail.textContent = opts.detail ?? IDLE_DETAIL;
+  notifyActionText.textContent = opts.action ?? IDLE_ACTION;
+}
+
+function captureB64() {
+  const w = video.videoWidth;
+  const h = video.videoHeight;
+  if (!w || !h) throw new Error("Camera chưa sẵn sàng");
+  canvas.width = w;
+  canvas.height = h;
+  canvas.getContext("2d").drawImage(video, 0, 0, w, h);
+  return canvas.toDataURL("image/jpeg", 0.92);
+}
+
+function stopCamera() {
+  stopAutoScan();
+  if (mediaStream) {
+    mediaStream.getTracks().forEach((t) => t.stop());
+    mediaStream = null;
+  }
+  video.srcObject = null;
+  cameraActive = false;
+  cameraBox.classList.add("frozen");
+  if (camStatus) camStatus.textContent = "Đã chụp ảnh";
+  updateButtons();
+}
+
+function captureAndStopCamera() {
+  const b64 = captureB64();
+  camSnapshot.src = b64;
+  stopCamera();
+  return b64;
+}
+
+function updateCamUI() {
+  if (!cameraActive) return;
+  cameraBox.classList.remove("frozen");
+  camSnapshot.removeAttribute("src");
+  if (faceModelsReady) {
+    camStatus.textContent = "Nhìn vào giữa khung — bấm Gửi/Lấy đồ";
+    return;
+  }
+  camStatus.textContent = "Camera sẵn sàng";
+}
+
+async function resumeCameraAfterAuth() {
+  await startCamera();
+  updateButtons();
+}
+
+function syncLockerAvailabilityNotice() {
+  if (
+    scanMode ||
+    notifyCard.classList.contains("loading") ||
+    choiceOverlay.classList.contains("show")
+  ) {
+    return;
+  }
+
+  if (!lockerState.can_gui_do) {
+    lockerFullNoticeActive = true;
+    setNotify("error", {
+      result: "Hết tủ trống",
+      detail: "Hiện không còn tủ trống. Vui lòng lấy đồ trước khi gửi tiếp.",
+      action: lockerState.can_lay_do ? "Bạn vẫn có thể bấm Lấy đồ" : "Chờ có tủ trống",
+    });
+    return;
+  }
+
+  if (lockerFullNoticeActive) {
+    lockerFullNoticeActive = false;
+    setNotify("idle");
+  }
 }
 
 function describeFaceAuthError(message) {
   const msg = String(message || "").trim();
 
-  if (/anti-spoof|gia mao|giả mạo|anh hoac man hinh|ảnh hoặc màn hình|install torch|pip install torch|torch/i.test(msg)) {
+  if (/khong tim thay|không tìm thấy|khong khop|không khớp|tin cay|tin cậy/i.test(msg)) {
     return {
-      result: "Lỗi anti-spoof",
+      result: "Không khớp phiên gửi đồ",
+      detail: msg,
+      action: "Dùng đúng khuôn mặt đã gửi đồ trước đó",
+    };
+  }
+
+  if (/het tu|hết tủ|khong con tu|không còn tủ/i.test(msg)) {
+    return {
+      result: "Hết tủ trống",
+      detail: msg,
+      action: "Chờ có tủ trống hoặc lấy đồ trước",
+    };
+  }
+
+  if (/chua thuc hien gui|chưa thực hiện gửi/i.test(msg)) {
+    return {
+      result: "Chưa gửi đồ",
+      detail: msg,
+      action: "Bấm Gửi đồ trước khi lấy",
+    };
+  }
+
+  if (
+    /anti-spoof|chong gia mao|chống giả mạo|gia mao|giả mạo|anh in|ảnh in|man hinh|màn hình/i.test(
+      msg
+    )
+  ) {
+    return {
+      result: "Lỗi chống giả mạo",
       detail: msg,
       action: "Dùng khuôn mặt thật, không chụp qua ảnh hoặc màn hình",
+    };
+  }
+
+  if (/loi ai|lỗi ai|embedding|trich xuat|trích xuất/i.test(msg)) {
+    return {
+      result: "Lỗi xử lý AI",
+      detail: msg,
+      action: "Thử lại với ánh sáng tốt hơn",
     };
   }
 
@@ -141,18 +262,172 @@ function describeFaceAuthError(message) {
   };
 }
 
+function hideChoiceOverlay() {
+  choiceOverlay.classList.remove("show");
+  choiceLockerGrid.style.display = "none";
+  choiceLockerGrid.innerHTML = "";
+  choiceActions.innerHTML = "";
+}
+
+function showChoiceOverlay(title, message, buttons, lockerButtons) {
+  choiceTitle.textContent = title;
+  choiceMessage.textContent = message;
+  choiceActions.innerHTML = "";
+  choiceLockerGrid.innerHTML = "";
+
+  if (lockerButtons?.length) {
+    choiceLockerGrid.style.display = "grid";
+    lockerButtons.forEach((lb) => choiceLockerGrid.appendChild(lb));
+  } else {
+    choiceLockerGrid.style.display = "none";
+  }
+
+  buttons.forEach((btn) => choiceActions.appendChild(btn));
+  choiceOverlay.classList.add("show");
+}
+
+function makeChoiceBtn(label, className, onClick) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = className;
+  button.textContent = label;
+  button.onclick = () => {
+    hideChoiceOverlay();
+    onClick();
+  };
+  return button;
+}
+
+async function submitWithCapture(url, extraFields) {
+  if (!lastCaptureB64) {
+    setNotify("error", {
+      result: "Thiếu ảnh xác thực",
+      detail: "Vui lòng quét khuôn mặt lại",
+      action: "Bấm Gửi đồ hoặc Lấy đồ",
+    });
+    await resumeCameraAfterAuth();
+    return null;
+  }
+
+  setNotify("loading", {
+    result: "Đang xử lý…",
+    detail: "Hệ thống đang thực hiện lựa chọn của bạn",
+    action: "Vui lòng đợi",
+  });
+
+  const fd = new FormData();
+  fd.append("image", lastCaptureB64);
+  if (extraFields) {
+    Object.entries(extraFields).forEach(([k, v]) => fd.append(k, String(v)));
+  }
+
+  try {
+    const res = await fetch(url, { method: "POST", body: fd });
+    return await res.json();
+  } catch (e) {
+    setNotify("error", {
+      result: "Lỗi hệ thống",
+      detail: e.message,
+      action: "Thử lại",
+    });
+    return null;
+  }
+}
+
+async function handleAuthChoice(data, actionLabel) {
+  if (data.code === "ALREADY_DEPOSITED") {
+    const lockers = (data.locker_ids || []).join(", ");
+    showChoiceOverlay(
+      "Bạn đã gửi đồ trước đó",
+      data.message || `Bạn đang dùng tủ: ${lockers}. Bạn muốn lấy đồ hay mở tủ mới?`,
+      [
+        makeChoiceBtn("Lấy đồ", "btn-success", async () => {
+          const result = await submitWithCapture("/face/lay-do", {});
+          if (result) await finishAuthResponse(result, "Lấy đồ");
+        }),
+        makeChoiceBtn("Mở tủ mới (gửi đồ thêm)", "btn-primary", async () => {
+          const result = await submitWithCapture("/face/gui-do", { intent: "new" });
+          if (result) await finishAuthResponse(result, "Gửi đồ");
+        }),
+        makeChoiceBtn("Hủy", "btn-muted", async () => {
+          setNotify("idle", {
+            detail: "Đã hủy. Bấm Gửi đồ hoặc Lấy đồ để thử lại",
+          });
+          await resumeCameraAfterAuth();
+        }),
+      ]
+    );
+    setNotify("idle", {
+      result: "Cần lựa chọn",
+      detail: data.message,
+      action: "Chọn thao tác trong hộp thoại",
+    });
+    return true;
+  }
+
+  if (data.code === "PICK_LOCKER") {
+    const ids = data.locker_ids || [];
+    const lockerButtons = ids.map((id) =>
+      makeChoiceBtn(`Tủ ${id}`, "", async () => {
+        const result = await submitWithCapture("/face/lay-do", { locker_id: id });
+        if (result) await finishAuthResponse(result, "Lấy đồ");
+      })
+    );
+
+    showChoiceOverlay(
+      "Chọn tủ cần mở",
+      data.message || "Bạn đang sử dụng nhiều tủ. Chọn một tủ hoặc mở tất cả.",
+      [
+        makeChoiceBtn("Mở tất cả tủ của tôi", "btn-success", async () => {
+          const result = await submitWithCapture("/face/lay-do", { open_all: "true" });
+          if (result) await finishAuthResponse(result, "Lấy đồ");
+        }),
+        makeChoiceBtn("Hủy", "btn-muted", async () => {
+          setNotify("idle", { detail: "Đã hủy lấy đồ" });
+          await resumeCameraAfterAuth();
+        }),
+      ],
+      lockerButtons
+    );
+    setNotify("idle", {
+      result: "Cần chọn tủ",
+      detail: data.message,
+      action: "Chọn tủ trong hộp thoại",
+    });
+    return true;
+  }
+
+  return false;
+}
+
+async function finishAuthResponse(data, actionLabel) {
+  if (!data.ok && (await handleAuthChoice(data, actionLabel))) {
+    return data;
+  }
+
+  showNotifyFromApi(data, actionLabel);
+  if (data.locker_id) selectedLockerId = data.locker_id;
+  else if (data.locker_ids?.length) selectedLockerId = data.locker_ids[0];
+
+  await refreshStatus();
+  await loadHistory();
+  await resumeCameraAfterAuth();
+  return data;
+}
+
 function showNotifyFromApi(data, actionLabel) {
   if (data.ok) {
-    const lockerTxt = data.locker_id ? `Tủ ${data.locker_id}` : "";
-    let detail = lockerTxt ? `Đã mở ${lockerTxt}` : "Xác thực thành công";
-    if (data.confidence != null) detail += ` · ${data.confidence}%`;
+    const lockerTxt = data.locker_id ? "Tủ " + data.locker_id : "—";
+    let detail = data.message || "Xác thực thành công";
+    if (data.confidence != null) detail += ` · Tin cậy ${data.confidence}%`;
     setNotify("success", {
-      result: `${actionLabel} thành công`,
+      result: "Xác thực thành công",
       locker: lockerTxt,
       detail,
       lockerClass: "success",
-      detailClass: "success",
-      action: lockerTxt ? "Đã mở tủ" : "Hoàn tất",
+      action: data.locker_id
+        ? `Tủ số ${data.locker_id} đã mở — có thể thao tác tiếp`
+        : `${actionLabel} thành công — có thể thao tác tiếp`,
     });
     return;
   }
@@ -160,53 +435,10 @@ function showNotifyFromApi(data, actionLabel) {
   const failure = describeFaceAuthError(data.message);
   setNotify("error", {
     result: failure.result,
+    locker: "",
     detail: failure.detail,
-    action: "Thử lại",
+    action: failure.action,
   });
-}
-
-function captureB64() {
-  const w = video.videoWidth;
-  const h = video.videoHeight;
-  if (!w || !h) throw new Error("Camera chưa sẵn sàng");
-  canvas.width = w;
-  canvas.height = h;
-  canvas.getContext("2d").drawImage(video, 0, 0, w, h);
-  return canvas.toDataURL("image/jpeg", 0.92);
-}
-
-function stopCamera() {
-  stopAutoScan();
-  if (mediaStream) {
-    mediaStream.getTracks().forEach((track) => track.stop());
-    mediaStream = null;
-  }
-  video.srcObject = null;
-  cameraActive = false;
-  cameraBox.classList.add("frozen");
-  camStatus.textContent = "Đã chụp ảnh";
-  updateButtons();
-}
-
-function captureAndStopCamera() {
-  const b64 = captureB64();
-  camSnapshot.src = b64;
-  stopCamera();
-  return b64;
-}
-
-function updateCamUI() {
-  if (!cameraActive) return;
-  cameraBox.classList.remove("frozen");
-  camSnapshot.removeAttribute("src");
-  camStatus.textContent = faceModelsReady
-    ? "Nhìn vào giữa khung và bấm Gửi/Lấy đồ"
-    : "Camera sẵn sàng";
-}
-
-async function resumeCameraAfterAuth() {
-  await startCamera();
-  updateButtons();
 }
 
 function renderLockers(lockers) {
@@ -230,30 +462,47 @@ function renderLockers(lockers) {
   });
 }
 
+const ACTION_VI = {
+  GUI_DO: "Gửi đồ",
+  LAY_DO: "Lấy đồ",
+  MANUAL: "Mở tủ thủ công",
+  SYSTEM: "Hệ thống",
+};
+
 function logToHistoryItem(log) {
   const ok = log.status === "SUCCESS";
   let icon = ok ? "ok" : "err";
   let iconClass = ok ? "fa-check" : "fa-xmark";
-  let title = log.message || log.action_type;
-  let desc = log.action_type;
+  let title = log.message || ACTION_VI[log.action_type] || log.action_type;
+  let desc = ACTION_VI[log.action_type] || log.action_type;
 
   if (log.action_type === "GUI_DO" && ok) {
-    title = `${ACTION_GUI} thành công`;
-    desc = log.message || "";
+    title = "Gửi đồ thành công";
+    desc = log.message || "Đã mở tủ và lưu phiên gửi đồ";
   } else if (log.action_type === "LAY_DO" && ok) {
-    title = `${ACTION_LAY} thành công`;
-    desc = log.message || "";
+    title = "Lấy đồ thành công";
+    desc = log.message || "Đã xác thực và mở tủ";
   } else if (log.action_type === "MANUAL" && ok) {
     title = "Mở tủ thủ công";
     desc = log.message || "";
   } else if (!ok) {
-    title = log.status === "SPOOF" ? "Cảnh báo giả mạo" : "Xác thực thất bại";
-    desc = log.message || "Không khớp khuôn mặt";
+    if (log.status === "SPOOF") {
+      title = "Cảnh báo giả mạo";
+      desc = log.message || "Phát hiện ảnh hoặc màn hình giả";
+    } else if (log.status === "ERROR") {
+      title = "Lỗi hệ thống";
+      desc = log.message || "Có lỗi xảy ra";
+    } else {
+      title = "Xác thực thất bại";
+      desc = log.message || "Không khớp khuôn mặt";
+    }
   }
 
   if (log.action_type === "SYSTEM") {
     icon = "info";
     iconClass = "fa-info";
+    title = log.message || "Thông báo hệ thống";
+    desc = "Hệ thống";
   }
 
   return `
@@ -290,22 +539,25 @@ function updateButtons() {
     btnLayDo.disabled = scanMode.url !== "/face/lay-do";
     return;
   }
+
   const ready = cameraActive && faceModelsReady;
-  btnGuiDo.disabled = !ready || !lockerState.can_gui_do;
-  btnLayDo.disabled = !ready || !lockerState.can_lay_do;
+  btnGuiDo.disabled = !ready;
+  btnLayDo.disabled = !ready;
 }
 
 async function loadFaceModels() {
   if (typeof faceapi === "undefined") {
-    showToast(false, "Không tải được thư viện nhận diện");
+    showToast(false, "Thư viện nhận diện khuôn mặt chưa tải");
     return;
   }
 
   try {
-    camStatus.textContent = "Đang tải AI phát hiện mặt...";
+    camStatus.textContent = "Đang tải AI phát hiện mặt…";
     await faceapi.nets.tinyFaceDetector.loadFromUri(FACE_MODEL_URL);
     faceModelsReady = true;
-    if (cameraActive) camStatus.textContent = "Nhìn vào giữa khung và bấm Gửi/Lấy đồ";
+    if (cameraActive) {
+      camStatus.textContent = "Nhìn vào giữa khung — bấm Gửi/Lấy đồ";
+    }
   } catch (e) {
     faceModelsReady = false;
     showToast(false, "Không tải model: " + e.message);
@@ -342,7 +594,9 @@ function stopAutoScan() {
 
 function cancelAutoScan() {
   stopAutoScan();
-  setNotify("idle", { result: IDLE_TITLE, detail: IDLE_DETAIL });
+  setNotify("idle", {
+    detail: "Đã hủy quét. Nhấn Gửi đồ hoặc Lấy đồ để thử lại",
+  });
   camStatus.textContent = "Camera sẵn sàng";
 }
 
@@ -352,13 +606,16 @@ async function tickAutoScan() {
   try {
     const detection = await faceapi.detectSingleFace(
       video,
-      new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.45 })
+      new faceapi.TinyFaceDetectorOptions({
+        inputSize: 416,
+        scoreThreshold: 0.45,
+      })
     );
 
     if (!detection || !isFaceCentered(detection)) {
       stableFrames = 0;
       cameraBox.classList.remove("face-ready");
-      const reason = detection ? "Đưa mặt vào giữa khung" : "Chưa thấy khuôn mặt";
+      const reason = !detection ? "Chưa thấy khuôn mặt" : "Đưa mặt vào giữa khung";
       scanHint.textContent = reason;
       camStatus.textContent = reason;
       return;
@@ -366,7 +623,7 @@ async function tickAutoScan() {
 
     stableFrames += 1;
     const pct = Math.min(100, Math.round((stableFrames / STABLE_NEEDED) * 100));
-    scanHint.textContent = `Giữ yên... ${pct}%`;
+    scanHint.textContent = `Giữ yên… ${pct}%`;
     camStatus.textContent = `Giữ yên để tự chụp ${pct}%`;
 
     if (stableFrames >= STABLE_NEEDED - 1) {
@@ -384,20 +641,29 @@ async function tickAutoScan() {
 }
 
 function startAutoScan(url, actionLabel) {
+  if (url === "/face/gui-do" && !lockerState.can_gui_do) {
+    setNotify("error", {
+      result: "Hết tủ trống",
+      detail: "Hiện không còn tủ trống. Vui lòng lấy đồ trước khi gửi tiếp.",
+      action: "Chờ có tủ trống hoặc lấy đồ",
+    });
+    return;
+  }
+
   if (!cameraActive) {
     setNotify("error", {
-      result: "Camera chưa sẵn",
-      detail: "Đang bật lại camera",
-      action: "Đợi",
+      result: "Camera chưa bật",
+      detail: "Đang khởi động lại camera…",
+      action: "Vui lòng đợi",
     });
     return;
   }
 
   if (!faceModelsReady) {
     setNotify("error", {
-      result: "AI chưa sẵn",
-      detail: "Đang tải nhận diện khuôn mặt",
-      action: "Đợi",
+      result: "AI chưa sẵn sàng",
+      detail: "Đang tải model phát hiện mặt, thử lại sau vài giây",
+      action: "Đợi và thử lại",
     });
     return;
   }
@@ -415,11 +681,11 @@ function startAutoScan(url, actionLabel) {
   else btnLayDo.classList.add("scanning");
 
   setNotify("idle", {
-    result: "Đang quét",
-    detail: "Giữ mặt ở giữa khung",
-    action: "Hủy quét",
+    result: "Đang quét khuôn mặt",
+    locker: "",
+    detail: `Bấm lại «${actionLabel}» để hủy · Tự chụp khi mặt ở giữa khung`,
+    action: "Đưa mặt vào giữa khung xanh",
   });
-
   camStatus.textContent = "Đưa khuôn mặt vào giữa khung";
   updateButtons();
   scanTimer = setInterval(tickAutoScan, SCAN_INTERVAL_MS);
@@ -432,7 +698,7 @@ async function refreshStatus() {
     lockerState = data;
 
     if (selectedLockerId === null && data.lockers?.length) {
-      const first = data.lockers.find((locker) => locker.is_empty) || data.lockers[0];
+      const first = data.lockers.find((l) => l.is_empty) || data.lockers[0];
       selectedLockerId = first.id;
     }
 
@@ -452,11 +718,13 @@ async function refreshStatus() {
     }
 
     updateButtons();
+    syncLockerAvailabilityNotice();
   } catch {
+    lockerFullNoticeActive = false;
     setNotify("error", {
-      result: "Mất kết nối",
-      detail: "Không liên lạc được server",
-      action: "Kiểm tra",
+      result: "Lỗi kết nối",
+      detail: "Không kết nối được server",
+      action: "Kiểm tra lại server",
     });
   }
 }
@@ -468,20 +736,21 @@ async function submitFaceApi(url, actionLabel) {
   let imageB64;
   try {
     imageB64 = captureAndStopCamera();
+    lastCaptureB64 = imageB64;
   } catch (e) {
     setNotify("error", {
-      result: "Không chụp được",
-      detail: e.message || "Bật lại camera rồi thử",
-      action: "Thử lại",
+      result: "Không chụp được ảnh",
+      detail: e.message,
+      action: "Thử lại sau khi camera bật",
     });
     await resumeCameraAfterAuth();
     return;
   }
 
   setNotify("loading", {
-    result: "Đang xác thực",
-    detail: "Đang phân tích ảnh",
-    action: "Đợi",
+    result: "Đang xác thực…",
+    detail: "AI đang phân tích ảnh vừa chụp",
+    action: "Vui lòng đợi",
   });
 
   try {
@@ -489,31 +758,34 @@ async function submitFaceApi(url, actionLabel) {
     fd.append("image", imageB64);
     const res = await fetch(url, { method: "POST", body: fd });
     const data = await res.json();
-    showNotifyFromApi(data, actionLabel);
-    if (data.locker_id) selectedLockerId = data.locker_id;
-    await refreshStatus();
-    await loadHistory();
+    if (!data.ok && (await handleAuthChoice(data, actionLabel))) {
+      return data;
+    }
+    await finishAuthResponse(data, actionLabel);
     return data;
   } catch (e) {
     setNotify("error", {
       result: "Lỗi hệ thống",
-      detail: e.message || "Vui lòng thử lại",
-      action: "Thử lại",
+      detail: e.message,
+      action: "Bấm Gửi đồ hoặc Lấy đồ để thử lại",
     });
-  } finally {
     await resumeCameraAfterAuth();
   }
 }
 
 async function startCamera() {
   if (mediaStream) {
-    mediaStream.getTracks().forEach((track) => track.stop());
+    mediaStream.getTracks().forEach((t) => t.stop());
     mediaStream = null;
   }
 
   try {
     mediaStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
+      video: {
+        facingMode: "user",
+        width: { ideal: 640 },
+        height: { ideal: 480 },
+      },
     });
     video.srcObject = mediaStream;
     cameraActive = false;
@@ -529,11 +801,12 @@ async function startCamera() {
   }
 }
 
-btnGuiDo.onclick = () => startAutoScan("/face/gui-do", ACTION_GUI);
-btnLayDo.onclick = () => startAutoScan("/face/lay-do", ACTION_LAY);
+btnGuiDo.onclick = () => startAutoScan("/face/gui-do", "Gửi đồ");
+btnLayDo.onclick = () => startAutoScan("/face/lay-do", "Lấy đồ");
+
 updateClock();
 setInterval(updateClock, 1000);
-setNotify("idle", { result: IDLE_TITLE, detail: IDLE_DETAIL });
+setNotify("idle");
 refreshStatus();
 loadHistory();
 loadFaceModels();
