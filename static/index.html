@@ -5,15 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Tủ đồ thông minh</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-  <link rel="stylesheet" href="/static/styles.css?v=20260531-1" />
+  <link rel="stylesheet" href="/static/styles.css?v=20260601-2" />
 </head>
 <body>
   <header class="header">
-    <div class="brand">
-      <div class="brand-icon"><i class="fa-solid fa-lock"></i></div>
-      <div>
-        <h1>TỦ ĐỒ THÔNG MINH</h1>
-        <p>Ứng dụng AI trong xác thực khuôn mặt</p>
+    <div class="header-left">
+      <div class="brand">
+        <div class="brand-icon"><i class="fa-solid fa-lock"></i></div>
+        <div>
+          <h1>TỦ ĐỒ THÔNG MINH</h1>
+          <p>Ứng dụng AI trong xác thực khuôn mặt</p>
+        </div>
       </div>
     </div>
     <div class="header-right">
@@ -22,8 +24,8 @@
         <span>Kết nối ESP32: <strong id="espText">Đang kiểm tra…</strong></span>
       </div>
       <div class="clock"><i class="fa-regular fa-clock"></i> <span id="clock">00:00:00</span></div>
-      <button type="button" class="btn-power" title="Tải lại trang" onclick="location.reload()">
-        <i class="fa-solid fa-power-off"></i>
+      <button type="button" class="btn-power" title="Mở Dashboard" aria-label="Mở Dashboard" onclick="location.href='/dashboard'">
+        <i class="fa-solid fa-gauge-high"></i>
       </button>
     </div>
   </header>
@@ -55,10 +57,6 @@
               <span class="notify-locker val-info">—</span>
             </div>
             <div class="notify-detail-text">Nhấn Gửi đồ hoặc Lấy đồ</div>
-          </div>
-          <div class="btn-notify idle" style="display: none">
-            <i class="fa-solid fa-bell"></i>
-            <span></span>
           </div>
         </div>
         <div class="btn-row">
@@ -102,6 +100,6 @@
   <canvas id="snap"></canvas>
 
   <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.14/dist/face-api.js"></script>
-  <script src="/static/app.js?v=20260531-1"></script>
+  <script src="/static/app.js?v=20260601-2"></script>
 </body>
 </html>

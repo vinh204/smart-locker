@@ -22,13 +22,22 @@ app.include_router(face_router)
 db.init_db()
 
 
-@app.get("/", response_class=HTMLResponse)
-async def index():
-    html_path = STATIC_DIR / "index.html"
+def render_page(name: str) -> HTMLResponse:
+    html_path = STATIC_DIR / name
     return HTMLResponse(
         html_path.read_text(encoding="utf-8"),
         headers={"Cache-Control": "no-store"},
     )
+
+
+@app.get("/", response_class=HTMLResponse)
+async def index():
+    return render_page("index.html")
+
+
+@app.get("/dashboard", response_class=HTMLResponse)
+async def dashboard():
+    return render_page("dashboard.html")
 
 
 if __name__ == "__main__":

@@ -86,15 +86,61 @@ async def activity_logs(limit: int = 5):
 @router.post("/open-locker/{locker_id}")
 async def manual_open_locker(locker_id: int):
     """Mở tủ thủ công từ panel điều khiển."""
-    lockers = {l["id"]: l for l in db.get_all_lockers()}
-    if locker_id not in lockers:
+    info = db.get_locker(locker_id)
+    if not info:
+        db.log_action("MANUAL_OPEN", "FAILED", message=f"Không tìm thấy tủ {locker_id}")
         return {"ok": False, "message": "Không tìm thấy tủ"}
     opened = open_locker(locker_id)
-    info = lockers[locker_id]
-    db.log_action("MANUAL", "SUCCESS", message=f"Mở tủ {locker_id} - {info['label']}")
+    db.log_action("MANUAL_OPEN", "SUCCESS", message=f"Mở tủ {locker_id} - {info['label']}")
     return {
         "ok": True,
         "message": f"Đã gửi lệnh mở tủ {locker_id}",
+        "locker_id": locker_id,
+        "locker_opened": opened,
+    }
+
+
+@router.post("/manual/gui-do/{locker_id}")
+async def manual_gui_do(locker_id: int):
+    info = db.get_locker(locker_id)
+    if not info:
+        db.log_action("MANUAL_GUI_DO", "FAILED", message=f"Không tìm thấy tủ {locker_id}")
+        return {"ok": False, "message": "Không tìm thấy tủ"}
+    if not info["is_empty"]:
+        db.log_action("MANUAL_GUI_DO", "FAILED", message=f"Tủ {locker_id} đang được sử dụng")
+        return {"ok": False, "message": f"Tủ {locker_id} đang được sử dụng"}
+    if not db.occupy_locker(locker_id):
+        db.log_action("MANUAL_GUI_DO", "FAILED", message=f"Không thể giữ tủ {locker_id}")
+        return {"ok": False, "message": f"Không thể giữ tủ {locker_id}"}
+
+    opened = open_locker(locker_id)
+    db.log_action("MANUAL_GUI_DO", "SUCCESS", message=f"Gửi đồ thủ công - tủ {locker_id}")
+    return {
+        "ok": True,
+        "message": f"Đã đánh dấu gửi đồ thủ công và mở tủ {locker_id}",
+        "locker_id": locker_id,
+        "locker_opened": opened,
+    }
+
+
+@router.post("/manual/lay-do/{locker_id}")
+async def manual_lay_do(locker_id: int):
+    info = db.get_locker(locker_id)
+    if not info:
+        db.log_action("MANUAL_LAY_DO", "FAILED", message=f"Không tìm thấy tủ {locker_id}")
+        return {"ok": False, "message": "Không tìm thấy tủ"}
+    if info["is_empty"]:
+        db.log_action("MANUAL_LAY_DO", "FAILED", message=f"Tủ {locker_id} đang trống")
+        return {"ok": False, "message": f"Tủ {locker_id} đang trống"}
+    if not db.release_locker(locker_id):
+        db.log_action("MANUAL_LAY_DO", "FAILED", message=f"Không thể trả tủ {locker_id}")
+        return {"ok": False, "message": f"Không thể trả tủ {locker_id}"}
+
+    opened = open_locker(locker_id)
+    db.log_action("MANUAL_LAY_DO", "SUCCESS", message=f"Lấy đồ thủ công - tủ {locker_id}")
+    return {
+        "ok": True,
+        "message": f"Đã lấy đồ thủ công và trả tủ {locker_id}",
         "locker_id": locker_id,
         "locker_opened": opened,
     }

@@ -14,15 +14,17 @@
 
 | Tệp | Vai trò |
 |-----|--------|
-| `main.py` | Khởi tạo FastAPI, mount thư mục `static/`, trả trang chủ `/` |
-| `face_api.py` | API gửi đồ, lấy đồ, trạng thái tủ, lịch sử và mở tủ thủ công |
+| `main.py` | Khởi tạo FastAPI, mount thư mục `static/`, trả trang `/` và `/dashboard` |
+| `face_api.py` | API gửi đồ, lấy đồ, trạng thái tủ, lịch sử và dashboard thao tác thủ công |
 | `database.py` | SQLite cho `lockers`, `deposits`, `logs` |
 | `face_utils.py` | Chuyển ảnh, chống giả mạo, trích embedding ArcFace, so khớp cosine |
 | `locker_service.py` | Lớp mô phỏng mở tủ |
 | `config.py` | Số lượng tủ, ngưỡng so khớp, anti-spoof và các ràng buộc hình học |
-| `static/index.html` | Khung HTML của giao diện |
+| `static/index.html` | Trang xác thực khuôn mặt |
+| `static/dashboard.html` | Trang dashboard thao tác thủ công |
 | `static/styles.css` | CSS của giao diện |
-| `static/app.js` | Logic frontend: camera, quét mặt, gọi API, render trạng thái |
+| `static/app.js` | Logic frontend của trang xác thực |
+| `static/dashboard.js` | Logic frontend của trang dashboard |
 | `face_db.sqlite` | File SQLite tạo ra khi chạy ứng dụng |
 
 ## Cài đặt
@@ -45,7 +47,7 @@ Lưu ý:
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Mở trình duyệt tại `http://localhost:8000`.
+Mở trình duyệt tại `http://localhost:8000` cho màn xác thực, hoặc `http://localhost:8000/dashboard` cho dashboard điều khiển thủ công.
 
 ## Luồng nghiệp vụ hiện tại
 
@@ -70,7 +72,9 @@ Mở trình duyệt tại `http://localhost:8000`.
 - `GET /face/logs`: Lấy lịch sử thao tác gần nhất.
 - `POST /face/gui-do`: Gửi đồ bằng ảnh camera hoặc file upload.
 - `POST /face/lay-do`: Lấy đồ bằng ảnh camera hoặc file upload.
-- `POST /face/open-locker/{locker_id}`: Mở tủ thủ công từ giao diện điều khiển.
+- `POST /face/manual/gui-do/{locker_id}`: Đánh dấu gửi đồ thủ công cho tủ được chọn.
+- `POST /face/manual/lay-do/{locker_id}`: Trả tủ và lấy đồ thủ công cho tủ được chọn.
+- `POST /face/open-locker/{locker_id}`: Mở tủ trực tiếp để kiểm tra hoặc điều khiển tích hợp ngoài UI.
 
 ## Ghi chú kỹ thuật
 

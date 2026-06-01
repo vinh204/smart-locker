@@ -107,6 +107,23 @@ def get_locker_status() -> dict:
     }
 
 
+def get_locker(locker_id: int) -> dict | None:
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT id, status FROM lockers WHERE id = ?",
+            (locker_id,),
+        ).fetchone()
+    if not row:
+        return None
+    empty = row["status"] == STATUS_LOCKER_EMPTY
+    return {
+        "id": int(row["id"]),
+        "status": row["status"],
+        "is_empty": empty,
+        "label": "Trống" if empty else "Đang sử dụng",
+    }
+
+
 def start_deposit(embedding: list[float]) -> tuple[str, int] | None:
     """
     Gán ô trống + lưu embedding trong một giao dịch.
@@ -143,6 +160,16 @@ def start_deposit(embedding: list[float]) -> tuple[str, int] | None:
         )
         conn.commit()
     return deposit_id, locker_id
+
+
+def occupy_locker(locker_id: int) -> bool:
+    with get_connection() as conn:
+        updated = conn.execute(
+            "UPDATE lockers SET status = ? WHERE id = ? AND status = ?",
+            (STATUS_LOCKER_IN_USE, locker_id, STATUS_LOCKER_EMPTY),
+        )
+        conn.commit()
+    return updated.rowcount > 0
 
 
 def get_active_deposits() -> list[dict]:
@@ -189,6 +216,32 @@ def complete_deposit(deposit_id: str) -> int | None:
             conn.execute("DELETE FROM lockers WHERE id = ?", (locker_id,))
         conn.commit()
     return locker_id
+
+
+def release_locker(locker_id: int) -> bool:
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT status FROM lockers WHERE id = ?",
+            (locker_id,),
+        ).fetchone()
+        if not row or row["status"] == STATUS_LOCKER_EMPTY:
+            return False
+        conn.execute(
+            """
+            UPDATE deposits
+            SET status = ?, embedding = NULL
+            WHERE locker_id = ? AND status = ?
+            """,
+            (STATUS_DEPOSIT_DONE, locker_id, STATUS_DEPOSIT_ACTIVE),
+        )
+        conn.execute(
+            "UPDATE lockers SET status = ? WHERE id = ?",
+            (STATUS_LOCKER_EMPTY, locker_id),
+        )
+        if locker_id > LOCKER_COUNT:
+            conn.execute("DELETE FROM lockers WHERE id = ?", (locker_id,))
+        conn.commit()
+    return True
 
 
 def get_all_lockers() -> list[dict]:

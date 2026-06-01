@@ -21,8 +21,6 @@ const notifyIconI = notifyIcon.querySelector("i");
 const notifyResult = notifyCard.querySelector(".notify-result");
 const notifyLocker = notifyCard.querySelector(".notify-locker");
 const notifyDetail = notifyCard.querySelector(".notify-detail-text");
-const notifyAction = notifyCard.querySelector(".btn-notify");
-const notifyActionText = notifyAction.querySelector("span");
 const historyList = document.getElementById("historyList");
 const toast = document.getElementById("toast");
 const choiceOverlay = document.getElementById("choiceOverlay");
@@ -83,7 +81,6 @@ function setNotify(state, opts = {}) {
 
   notifyCard.className = "notify-strip " + state;
   notifyIcon.className = "notify-icon " + state;
-  notifyAction.className = "btn-notify " + state;
   notifyResult.className = "notify-result val-" + tone;
   notifyLocker.className = "notify-locker val-" + lockerTone;
   notifyDetail.className =
@@ -94,7 +91,6 @@ function setNotify(state, opts = {}) {
   notifyLocker.textContent = lockerText;
   notifyLocker.style.display = lockerText ? "inline-flex" : "none";
   notifyDetail.textContent = opts.detail ?? IDLE_DETAIL;
-  notifyActionText.textContent = opts.action ?? IDLE_ACTION;
 }
 
 function captureB64() {
@@ -157,7 +153,9 @@ function syncLockerAvailabilityNotice() {
     setNotify("error", {
       result: "Hết tủ trống",
       detail: "Hiện không còn tủ trống. Vui lòng lấy đồ trước khi gửi tiếp.",
-      action: lockerState.can_lay_do ? "Bạn vẫn có thể bấm Lấy đồ" : "Chờ có tủ trống",
+      action: lockerState.can_lay_do
+        ? "Bạn vẫn có thể bấm Lấy đồ"
+        : "Mở Dashboard để trả tủ",
     });
     return;
   }
@@ -183,7 +181,7 @@ function describeFaceAuthError(message) {
     return {
       result: "Hết tủ trống",
       detail: msg,
-      action: "Chờ có tủ trống hoặc lấy đồ trước",
+      action: "Mở Dashboard để trả tủ hoặc lấy đồ trước",
     };
   }
 
@@ -203,7 +201,7 @@ function describeFaceAuthError(message) {
     return {
       result: "Lỗi chống giả mạo",
       detail: msg,
-      action: "Dùng khuôn mặt thật, không chụp qua ảnh hoặc màn hình",
+      action: "",
     };
   }
 
@@ -466,6 +464,9 @@ const ACTION_VI = {
   GUI_DO: "Gửi đồ",
   LAY_DO: "Lấy đồ",
   MANUAL: "Mở tủ thủ công",
+  MANUAL_OPEN: "Mở tủ thủ công",
+  MANUAL_GUI_DO: "Gửi đồ thủ công",
+  MANUAL_LAY_DO: "Lấy đồ thủ công",
   SYSTEM: "Hệ thống",
 };
 
@@ -482,11 +483,20 @@ function logToHistoryItem(log) {
   } else if (log.action_type === "LAY_DO" && ok) {
     title = "Lấy đồ thành công";
     desc = log.message || "Đã xác thực và mở tủ";
-  } else if (log.action_type === "MANUAL" && ok) {
+  } else if (log.action_type === "MANUAL_GUI_DO" && ok) {
+    title = "Gửi đồ thủ công";
+    desc = log.message || "";
+  } else if (log.action_type === "MANUAL_LAY_DO" && ok) {
+    title = "Lấy đồ thủ công";
+    desc = log.message || "";
+  } else if ((log.action_type === "MANUAL_OPEN" || log.action_type === "MANUAL") && ok) {
     title = "Mở tủ thủ công";
     desc = log.message || "";
   } else if (!ok) {
-    if (log.status === "SPOOF") {
+    if (/^MANUAL/.test(log.action_type)) {
+      title = "Thao tác thủ công thất bại";
+      desc = log.message || "Không thể điều khiển tủ";
+    } else if (log.status === "SPOOF") {
       title = "Cảnh báo giả mạo";
       desc = log.message || "Phát hiện ảnh hoặc màn hình giả";
     } else if (log.status === "ERROR") {
@@ -645,7 +655,9 @@ function startAutoScan(url, actionLabel) {
     setNotify("error", {
       result: "Hết tủ trống",
       detail: "Hiện không còn tủ trống. Vui lòng lấy đồ trước khi gửi tiếp.",
-      action: "Chờ có tủ trống hoặc lấy đồ",
+      action: lockerState.can_lay_do
+        ? "Bạn vẫn có thể bấm Lấy đồ"
+        : "Mở Dashboard để trả tủ",
     });
     return;
   }
@@ -696,13 +708,16 @@ async function refreshStatus() {
     const res = await fetch("/face/status");
     const data = await res.json();
     lockerState = data;
+    const lockers = data.lockers || [];
 
-    if (selectedLockerId === null && data.lockers?.length) {
-      const first = data.lockers.find((l) => l.is_empty) || data.lockers[0];
+    if (!lockers.length) {
+      selectedLockerId = null;
+    } else if (!lockers.some((locker) => locker.id === selectedLockerId)) {
+      const first = lockers.find((locker) => locker.is_empty) || lockers[0];
       selectedLockerId = first.id;
     }
 
-    renderLockers(data.lockers || []);
+    renderLockers(lockers);
     document.getElementById("sumTotal").textContent = data.total_lockers ?? 0;
     document.getElementById("sumBusy").textContent = data.in_use_lockers ?? 0;
     document.getElementById("sumEmpty").textContent = data.empty_lockers ?? 0;
