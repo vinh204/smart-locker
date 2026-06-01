@@ -1,7 +1,7 @@
 const IDLE_TITLE = "Xin chào!";
 const IDLE_DETAIL =
   "Bấm Gửi đồ hoặc Lấy đồ — hệ thống tự chụp khi mặt ở giữa khung";
-const IDLE_ACTION = "Sẵn sàng thao tác";
+const IDLE_ACTION = "";
 const STABLE_NEEDED = 6;
 const SCAN_INTERVAL_MS = 120;
 const FACE_MODEL_URL =
