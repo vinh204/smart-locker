@@ -13,8 +13,6 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
-#include <ESP32Servo.h>
-#include <ESP32PWM.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
@@ -28,25 +26,17 @@ const char* DEVICE_ID = "wokwi-esp32-locker";
 
 const int LOCKER_COUNT = 3;
 const int LED_PINS[LOCKER_COUNT] = {2, 4, 15};
-// Tránh GPIO 5 (hay xung đột PWM/WiFi trên ESP32). Khớp diagram.json.
-const int SERVO_PINS[LOCKER_COUNT] = {18, 13, 17};
 const int BUZZER_PIN = 23;
 const int LCD_COLUMNS = 16;
 const int LCD_ROWS = 2;
-const int SERVO_CLOSED_DEG = 20;
-const int SERVO_OPEN_DEG = 160;
-const int SERVO_ATTACH_MIN_US = 500;
-const int SERVO_ATTACH_MAX_US = 2500;
 const unsigned long OPEN_HOLD_MS = 2200;
 
 WiFiClient wifiClient;
 PubSubClient mqttClient(wifiClient);
-Servo lockerServos[LOCKER_COUNT];
 LiquidCrystal_I2C lcd(0x27, LCD_COLUMNS, LCD_ROWS);
 
 unsigned long lastReconnectAttempt = 0;
 unsigned long lastHeartbeatSentAt = 0;
-bool lockerPhysicallyOpen[LOCKER_COUNT] = {false, false, false};
 bool lockerInUse[LOCKER_COUNT] = {false, false, false};
 
 String topicDeviceStatus() {
@@ -86,33 +76,29 @@ void beepSuccess() {
 
 void applyLockerLeds() {
   for (int i = 0; i < LOCKER_COUNT; i++) {
-    bool on = lockerInUse[i] || lockerPhysicallyOpen[i];
-    digitalWrite(LED_PINS[i], on ? HIGH : LOW);
+    digitalWrite(LED_PINS[i], lockerInUse[i] ? HIGH : LOW);
   }
 }
 
-void writeServoAngle(int idx, int angle) {
-  angle = constrain(angle, SERVO_CLOSED_DEG, SERVO_OPEN_DEG);
-  lockerServos[idx].write(angle);
-}
-
-void animateServoTo(int idx, int targetAngle) {
-  int from = (targetAngle == SERVO_OPEN_DEG) ? SERVO_CLOSED_DEG : SERVO_OPEN_DEG;
-  int step = (targetAngle > from) ? 8 : -8;
-  for (int a = from; step > 0 ? a <= targetAngle : a >= targetAngle; a += step) {
-    writeServoAngle(idx, a);
-    mqttClient.loop();
-    delay(25);
-  }
-  writeServoAngle(idx, targetAngle);
-}
-
-void closeAllServos() {
+void updateLcdForOccupancy() {
+  int emptyCount = 0;
   for (int i = 0; i < LOCKER_COUNT; i++) {
-    writeServoAngle(i, SERVO_CLOSED_DEG);
-    lockerPhysicallyOpen[i] = false;
+    if (!lockerInUse[i]) {
+      emptyCount++;
+    }
   }
-  applyLockerLeds();
+
+  if (emptyCount == LOCKER_COUNT) {
+    setLcd("3 tủ sẵn sàng", "Gửi đồ / Lấy đồ");
+    return;
+  }
+
+  if (emptyCount == 0) {
+    setLcd("Hết tủ trống", "Vui lòng đợi");
+    return;
+  }
+
+  setLcd(String(emptyCount) + " tủ trống", "Gửi đồ / Lấy đồ");
 }
 
 void setLockerInUse(int lockerId, bool inUse) {
@@ -136,30 +122,31 @@ void handleOccupancy(byte* payload, unsigned int length) {
     }
   }
   applyLockerLeds();
+  updateLcdForOccupancy();
   Serial.println("[MQTT] occupancy synced");
 }
 
 void lcdForOpen(const char* action, int lockerId) {
   String tu = "TU " + String(lockerId);
   if (strcmp(action, "GUI_DO") == 0) {
-    setLcd("GUI DO - " + tu, "Dat do vao tu");
+    setLcd("Gửi đồ - " + tu, "Đặt đồ vào tủ");
   } else if (strcmp(action, "LAY_DO") == 0) {
-    setLcd("LAY DO - " + tu, "Lay do ra");
+    setLcd("Lấy đồ - " + tu, "Lấy đồ ra");
   } else if (strcmp(action, "MANUAL") == 0) {
-    setLcd("MO THU CONG", tu);
+    setLcd("MỞ THỦ CÔNG", tu);
   } else {
-    setLcd(">>> MO " + tu, "Dang mo...");
+    setLcd(">>> MỞ " + tu, "Đang mở...");
   }
 }
 
 void lcdForClosed(const char* action, int lockerId) {
   String tu = "Tu " + String(lockerId);
   if (strcmp(action, "GUI_DO") == 0) {
-    setLcd(tu + " da dong", "Dang su dung");
+    setLcd(tu + " đã đóng", "Đang sử dụng");
   } else if (strcmp(action, "LAY_DO") == 0) {
-    setLcd("Lay do xong", tu + " trong");
+    setLcd("Lấy đồ xong", tu + " trống");
   } else {
-    setLcd(tu + " da dong", "San sang");
+    setLcd(tu + " đã đóng", "Sẵn sàng");
   }
 }
 
@@ -210,13 +197,6 @@ void openLockerSequence(int lockerId, const char* requestId, const char* action)
   Serial.print(" action=");
   Serial.println(action);
 
-  closeAllServos();
-  Serial.print("  servo ");
-  Serial.print(SERVO_PINS[idx]);
-  Serial.println(" opening...");
-  animateServoTo(idx, SERVO_OPEN_DEG);
-  lockerPhysicallyOpen[idx] = true;
-  applyLockerLeds();
   lcdForOpen(action, lockerId);
   beepSuccess();
   publishLockerStatus(lockerId, "opened", requestId, action, true, "Locker opened");
@@ -227,16 +207,12 @@ void openLockerSequence(int lockerId, const char* requestId, const char* action)
     delay(20);
   }
 
-  animateServoTo(idx, SERVO_CLOSED_DEG);
-  lockerPhysicallyOpen[idx] = false;
-
   if (strcmp(action, "GUI_DO") == 0) {
     setLockerInUse(lockerId, true);
   } else if (strcmp(action, "LAY_DO") == 0) {
     setLockerInUse(lockerId, false);
-  } else {
-    applyLockerLeds();
   }
+  applyLockerLeds();
 
   lcdForClosed(action, lockerId);
   publishLockerStatus(lockerId, "closed", requestId, action, true, "Locker closed");
@@ -281,6 +257,14 @@ void handleCommand(const String& topic, byte* payload, unsigned int length) {
 
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
   String topicStr = String(topic);
+  Serial.print("[MQTT] received topic=");
+  Serial.println(topicStr);
+  Serial.print("[MQTT] payload=");
+  for (unsigned int i = 0; i < length; i++) {
+    Serial.write(payload[i]);
+  }
+  Serial.println();
+
   if (topicStr == topicOccupancy()) {
     handleOccupancy(payload, length);
     return;
@@ -319,30 +303,18 @@ bool ensureMqtt() {
   mqttClient.subscribe(topicCommandSubscription().c_str(), 1);
   mqttClient.subscribe(topicOccupancy().c_str(), 1);
   publishDeviceStatus(true);
-  setLcd("He thong san sang", "Gui do / Lay do");
+  setLcd("Hệ thống sẵn sàng", "Gửi đồ / Lấy đồ");
   return true;
 }
 
 void setup() {
   Serial.begin(115200);
 
-  ESP32PWM::allocateTimer(0);
-  ESP32PWM::allocateTimer(1);
-  ESP32PWM::allocateTimer(2);
-  ESP32PWM::allocateTimer(3);
-
   for (int i = 0; i < LOCKER_COUNT; i++) {
     pinMode(LED_PINS[i], OUTPUT);
     digitalWrite(LED_PINS[i], LOW);
-    lockerServos[i].setPeriodHertz(50);
-    lockerServos[i].attach(
-      SERVO_PINS[i],
-      SERVO_ATTACH_MIN_US,
-      SERVO_ATTACH_MAX_US
-    );
-    writeServoAngle(i, SERVO_CLOSED_DEG);
-    delay(200);
   }
+
   pinMode(BUZZER_PIN, OUTPUT);
 
   Wire.begin(21, 22);
