@@ -31,6 +31,27 @@
       "left": 200,
       "attrs": { "color": "green", "label": "Tu 3" }
     },
+    {
+      "type": "wokwi-servo",
+      "id": "servo1",
+      "top": 120,
+      "left": -80,
+      "attrs": { "horn": "single" }
+    },
+    {
+      "type": "wokwi-servo",
+      "id": "servo2",
+      "top": 120,
+      "left": 0,
+      "attrs": { "horn": "single" }
+    },
+    {
+      "type": "wokwi-servo",
+      "id": "servo3",
+      "top": 120,
+      "left": 80,
+      "attrs": { "horn": "single" }
+    },
 
     {
       "type": "wokwi-lcd1602",
@@ -51,7 +72,7 @@
       "id": "title1",
       "top": -30,
       "left": 60,
-      "attrs": { "text": "Smart Locker x3 — MQTT Wokwi (No Servo)" }
+      "attrs": { "text": "Smart Locker x3 - MQTT Wokwi + 3 Servo" }
     }
   ],
   "connections": [
@@ -63,11 +84,20 @@
     [ "led2:C", "esp:GND.2", "black", [] ],
     [ "esp:15", "led3:A", "green", [] ],
     [ "led3:C", "esp:GND.3", "black", [] ],
+    [ "esp:13", "servo1:PWM", "orange", [] ],
+    [ "servo1:V+", "esp:5V", "red", [] ],
+    [ "servo1:GND", "esp:GND.4", "black", [] ],
+    [ "esp:14", "servo2:PWM", "orange", [] ],
+    [ "servo2:V+", "esp:5V", "red", [] ],
+    [ "servo2:GND", "esp:GND.5", "black", [] ],
+    [ "esp:27", "servo3:PWM", "orange", [] ],
+    [ "servo3:V+", "esp:5V", "red", [] ],
+    [ "servo3:GND", "esp:GND.6", "black", [] ],
     [ "esp:21", "lcd1:SDA", "green", [] ],
     [ "esp:22", "lcd1:SCL", "yellow", [] ],
     [ "lcd1:VCC", "esp:5V", "red", [] ],
-    [ "lcd1:GND", "esp:GND.4", "black", [] ],
+    [ "lcd1:GND", "esp:GND.7", "black", [] ],
     [ "esp:23", "buzzer1:1", "green", [] ],
-    [ "buzzer1:2", "esp:GND.5", "black", [] ]
+    [ "buzzer1:2", "esp:GND.8", "black", [] ]
   ]
 }

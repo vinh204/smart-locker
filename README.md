@@ -6,7 +6,7 @@ Dự án demo hệ thống tủ đồ thông minh kết hợp nhận diện khu�
 - Backend FastAPI xử lý xác thực ảnh, chống giả mạo và so khớp khuôn mặt.
 - SQLite lưu trạng thái tủ, phiên gửi/lấy đồ và lịch sử thao tác.
 - Frontend web xác thực bằng webcam và dashboard điều khiển thủ công.
-- Cầu nối MQTT đến Wokwi ESP32 mô phỏng `LED`, `LCD`, `buzzer` (servo đã loại bỏ khỏi mô phỏng hiện tại).
+- Cầu nối MQTT đến Wokwi ESP32 mô phỏng `LED`, `LCD`, `buzzer` và `3 servo` tương ứng 3 tủ.
 
 ## Trạng thái repo hiện tại
 
@@ -17,7 +17,7 @@ Dự án demo hệ thống tủ đồ thông minh kết hợp nhận diện khu�
 - `locker_service.py` mở tủ qua MQTT hoặc chế độ mock.
 - `mqtt_service.py` là cầu nối MQTT, publish lệnh mở tủ và đồng bộ trạng thái occupancy.
 - `config.py` chứa cấu hình MQTT, số lượng tủ, nhận diện khuôn mặt và chế độ điều khiển.
-- `wokwi/sketch.ino` là firmware ESP32 mô phỏng (LED/LCD/buzzer, không dùng servo trong mô phỏng hiện tại).
+- `wokwi/sketch.ino` là firmware ESP32 mô phỏng (LED/LCD/buzzer/3 servo).
 - `wokwi/diagram.json` là sơ đồ phần cứng Wokwi.
 
 ## Cấu trúc chính
@@ -31,7 +31,7 @@ Dự án demo hệ thống tủ đồ thông minh kết hợp nhận diện khu�
 | `locker_service.py` | Mở tủ qua MQTT hoặc mock |
 | `mqtt_service.py` | Cầu nối MQTT, publish lệnh, subscribe trạng thái, đồng bộ occupancy |
 | `config.py` | Cấu hình tủ, MQTT, nhận diện khuôn mặt |
-| `wokwi/sketch.ino` | Firmware ESP32 mô phỏng Wokwi (LED/LCD/buzzer) |
+| `wokwi/sketch.ino` | Firmware ESP32 mô phỏng Wokwi (LED/LCD/buzzer/3 servo) |
 | `wokwi/diagram.json` | Sơ đồ phần cứng mô phỏng Wokwi |
 | `static/index.html` | Trang xác thực khuôn mặt |
 | `static/dashboard.html` | Dashboard điều khiển thủ công |
@@ -82,7 +82,9 @@ set LOCKER_CONTROL_MODE=mock
 
 ## Wokwi và MQTT
 
-Hiện tại Wokwi mô phỏng ESP32 chỉ dùng `LED`, `LCD`, `buzzer`; phần servo đã bị loại bỏ do mô phỏng không ổn định.
+Wokwi hiện mô phỏng ESP32 với `LED`, `LCD`, `buzzer` và `3 servo` đại diện cơ cấu mở cho 3 tủ.
+
+Khi backend gửi lệnh mở tủ thành công, servo của tủ tương ứng sẽ quay `90°`, giữ trong `5 giây`, rồi quay về `0°`.
 
 Để chạy mô phỏng Wokwi:
 
@@ -133,4 +135,4 @@ Dashboard cho phép:
 - `VERIFY_THRESHOLD` dùng để so khớp cosine embedding.
 - `ENABLE_ANTI_SPOOF = True` yêu cầu model và dependency đủ.
 - `mqtt_service.py` đồng bộ occupancy từ database và nhận trạng thái ESP32 qua MQTT.
-- `wokwi/sketch.ino` hiện mô phỏng ESP32 và cập nhật LCD/LED; không có servo trong mô phỏng thực tế.
+- `wokwi/sketch.ino` mô phỏng ESP32, cập nhật LCD/LED và điều khiển 3 servo theo lệnh mở tủ.

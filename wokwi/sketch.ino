@@ -13,6 +13,7 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
+#include <ESP32Servo.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
@@ -26,14 +27,18 @@ const char* DEVICE_ID = "wokwi-esp32-locker";
 
 const int LOCKER_COUNT = 3;
 const int LED_PINS[LOCKER_COUNT] = {2, 4, 15};
+const int SERVO_PINS[LOCKER_COUNT] = {13, 14, 27};
 const int BUZZER_PIN = 23;
 const int LCD_COLUMNS = 16;
 const int LCD_ROWS = 2;
-const unsigned long OPEN_HOLD_MS = 2200;
+const int SERVO_CLOSED_ANGLE = 0;
+const int SERVO_OPEN_ANGLE = 90;
+const unsigned long SERVO_OPEN_HOLD_MS = 5000;
 
 WiFiClient wifiClient;
 PubSubClient mqttClient(wifiClient);
 LiquidCrystal_I2C lcd(0x27, LCD_COLUMNS, LCD_ROWS);
+Servo lockerServos[LOCKER_COUNT];
 
 unsigned long lastReconnectAttempt = 0;
 unsigned long lastHeartbeatSentAt = 0;
@@ -106,6 +111,12 @@ void setLockerInUse(int lockerId, bool inUse) {
   if (idx < 0) return;
   lockerInUse[idx] = inUse;
   applyLockerLeds();
+}
+
+void setServoAngle(int lockerId, int angle) {
+  int idx = lockerIndex(lockerId);
+  if (idx < 0) return;
+  lockerServos[idx].write(angle);
 }
 
 void handleOccupancy(byte* payload, unsigned int length) {
@@ -199,13 +210,15 @@ void openLockerSequence(int lockerId, const char* requestId, const char* action)
 
   lcdForOpen(action, lockerId);
   beepSuccess();
+  setServoAngle(lockerId, SERVO_OPEN_ANGLE);
   publishLockerStatus(lockerId, "opened", requestId, action, true, "Locker opened");
 
   unsigned long t0 = millis();
-  while (millis() - t0 < OPEN_HOLD_MS) {
+  while (millis() - t0 < SERVO_OPEN_HOLD_MS) {
     mqttClient.loop();
     delay(20);
   }
+  setServoAngle(lockerId, SERVO_CLOSED_ANGLE);
 
   if (strcmp(action, "GUI_DO") == 0) {
     setLockerInUse(lockerId, true);
@@ -216,7 +229,7 @@ void openLockerSequence(int lockerId, const char* requestId, const char* action)
 
   lcdForClosed(action, lockerId);
   publishLockerStatus(lockerId, "closed", requestId, action, true, "Locker closed");
-  setLcd("3 tu san sang", "Gui do / Lay do");
+  updateLcdForOccupancy();
   publishDeviceStatus(true);
 }
 
@@ -313,6 +326,9 @@ void setup() {
   for (int i = 0; i < LOCKER_COUNT; i++) {
     pinMode(LED_PINS[i], OUTPUT);
     digitalWrite(LED_PINS[i], LOW);
+    lockerServos[i].setPeriodHertz(50);
+    lockerServos[i].attach(SERVO_PINS[i], 500, 2400);
+    lockerServos[i].write(SERVO_CLOSED_ANGLE);
   }
 
   pinMode(BUZZER_PIN, OUTPUT);
