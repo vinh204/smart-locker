@@ -6,72 +6,72 @@
     {
       "type": "board-esp32-devkit-c-v4",
       "id": "esp",
-      "top": 80,
-      "left": 40,
+      "top": 280,
+      "left": 220,
       "attrs": { "env": "WOKWI" }
     },
     {
       "type": "wokwi-led",
       "id": "led1",
-      "top": 0,
-      "left": 40,
+      "top": 140,
+      "left": 95,
       "attrs": { "color": "red", "label": "Tu 1" }
     },
     {
       "type": "wokwi-led",
       "id": "led2",
-      "top": 0,
-      "left": 120,
+      "top": 140,
+      "left": 275,
       "attrs": { "color": "yellow", "label": "Tu 2" }
     },
     {
       "type": "wokwi-led",
       "id": "led3",
-      "top": 0,
-      "left": 200,
+      "top": 140,
+      "left": 455,
       "attrs": { "color": "green", "label": "Tu 3" }
     },
     {
       "type": "wokwi-servo",
       "id": "servo1",
-      "top": 120,
-      "left": -80,
+      "top": 60,
+      "left": 20,
       "attrs": { "horn": "single" }
     },
     {
       "type": "wokwi-servo",
       "id": "servo2",
-      "top": 120,
-      "left": 0,
+      "top": 60,
+      "left": 200,
       "attrs": { "horn": "single" }
     },
     {
       "type": "wokwi-servo",
       "id": "servo3",
-      "top": 120,
-      "left": 80,
+      "top": 60,
+      "left": 380,
       "attrs": { "horn": "single" }
     },
 
     {
       "type": "wokwi-lcd1602",
       "id": "lcd1",
-      "top": 40,
-      "left": 360,
+      "top": 170,
+      "left": 560,
       "attrs": { "pins": "i2c" }
     },
     {
       "type": "wokwi-buzzer",
       "id": "buzzer1",
-      "top": 320,
-      "left": 120,
+      "top": 360,
+      "left": 680,
       "attrs": { "label": "Beep" }
     },
     {
       "type": "wokwi-text",
       "id": "title1",
-      "top": -30,
-      "left": 60,
+      "top": 10,
+      "left": 210,
       "attrs": { "text": "Smart Locker x3 - MQTT Wokwi + 3 Servo" }
     }
   ],
