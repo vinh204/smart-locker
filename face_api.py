@@ -12,7 +12,13 @@ from face_utils import (
     find_all_matching_deposits,
     is_spoof_rejection,
 )
+from config import LOCKER_CONTROL_MODE
 from locker_service import open_locker
+from mqtt_service import (
+    get_bridge_status,
+    get_locker_hardware_states,
+    sync_lockers_occupancy,
+)
 
 router = APIRouter(prefix="/face", tags=["Tủ khóa & Khuôn mặt"])
 
@@ -64,17 +70,34 @@ def _fail(action: str, status: str, code: str, message: str, **extra) -> dict:
 
 @router.get("/status")
 async def locker_screen_status():
-    """Màn hình tủ: kiểm tra còn ô trống không."""
+    """Màn hình tủ + trạng thái MQTT/ESP32."""
     st = db.get_locker_status()
     message = None
     if not st["can_gui_do"]:
         message = "Hiện không còn tủ trống"
+
+    lockers = db.get_all_lockers()
+    hardware = get_locker_hardware_states()
+    for locker in lockers:
+        hw = hardware.get(locker["id"], {})
+        locker["hardware"] = hw if hw else None
+
+    bridge = get_bridge_status()
+    if LOCKER_CONTROL_MODE.lower() == "mqtt":
+        esp_connected = bool(
+            bridge.get("broker_connected") and bridge.get("device_online")
+        )
+    else:
+        esp_connected = True
+
     return {
         "ok": True,
         **st,
         "message": message,
-        "lockers": db.get_all_lockers(),
-        "esp_connected": True,
+        "lockers": lockers,
+        "control_mode": LOCKER_CONTROL_MODE.lower(),
+        "esp_connected": esp_connected,
+        "mqtt": bridge,
     }
 
 
@@ -90,11 +113,19 @@ async def manual_open_locker(locker_id: int):
     if not info:
         db.log_action("MANUAL_OPEN", "FAILED", message=f"Không tìm thấy tủ {locker_id}")
         return {"ok": False, "message": "Không tìm thấy tủ"}
-    opened = open_locker(locker_id)
-    db.log_action("MANUAL_OPEN", "SUCCESS", message=f"Mở tủ {locker_id} - {info['label']}")
+    opened = open_locker(locker_id, action="MANUAL")
+    db.log_action(
+        "MANUAL_OPEN",
+        "SUCCESS" if opened else "FAILED",
+        message=f"Mở tủ {locker_id} - {info['label']}",
+    )
     return {
-        "ok": True,
-        "message": f"Đã gửi lệnh mở tủ {locker_id}",
+        "ok": opened,
+        "message": (
+            f"Đã gửi lệnh mở tủ {locker_id}"
+            if opened
+            else f"Không mở được tủ {locker_id} — kiểm tra Wokwi/MQTT"
+        ),
         "locker_id": locker_id,
         "locker_opened": opened,
     }
@@ -113,7 +144,9 @@ async def manual_gui_do(locker_id: int):
         db.log_action("MANUAL_GUI_DO", "FAILED", message=f"Không thể giữ tủ {locker_id}")
         return {"ok": False, "message": f"Không thể giữ tủ {locker_id}"}
 
-    opened = open_locker(locker_id)
+    sync_lockers_occupancy()
+    opened = open_locker(locker_id, action="GUI_DO")
+    sync_lockers_occupancy()
     db.log_action("MANUAL_GUI_DO", "SUCCESS", message=f"Gửi đồ thủ công - tủ {locker_id}")
     return {
         "ok": True,
@@ -136,7 +169,9 @@ async def manual_lay_do(locker_id: int):
         db.log_action("MANUAL_LAY_DO", "FAILED", message=f"Không thể trả tủ {locker_id}")
         return {"ok": False, "message": f"Không thể trả tủ {locker_id}"}
 
-    opened = open_locker(locker_id)
+    sync_lockers_occupancy()
+    opened = open_locker(locker_id, action="LAY_DO")
+    sync_lockers_occupancy()
     db.log_action("MANUAL_LAY_DO", "SUCCESS", message=f"Lấy đồ thủ công - tủ {locker_id}")
     return {
         "ok": True,
@@ -193,7 +228,8 @@ async def gui_do(
         )
 
     deposit_id, locker_id = started
-    opened = open_locker(locker_id)
+    opened = open_locker(locker_id, action="GUI_DO")
+    sync_lockers_occupancy()
     db.log_action(action, "SUCCESS", message=f"Gửi đồ thành công - tủ {locker_id}")
     return {
         "ok": True,
@@ -273,7 +309,7 @@ async def lay_do(
         lid = db.complete_deposit(dep["id"])
         if lid is None:
             continue
-        open_locker(lid)
+        open_locker(lid, action="LAY_DO")
         opened_lockers.append(lid)
 
     if not opened_lockers:
@@ -295,6 +331,7 @@ async def lay_do(
         log_msg = f"Lấy đồ thành công - tủ {ids}"
 
     db.log_action(action, "SUCCESS", confidence=confidence, message=log_msg)
+    sync_lockers_occupancy()
     return {
         "ok": True,
         "message": msg,

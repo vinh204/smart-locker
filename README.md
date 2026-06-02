@@ -7,8 +7,8 @@
 - Backend nhận ảnh từ web, chống giả mạo, trích xuất embedding và so khớp người gửi/lấy đồ.
 - Frontend dùng `face-api` phía client để canh khuôn mặt vào giữa khung rồi tự chụp.
 - Dữ liệu trạng thái tủ, phiên gửi đồ và lịch sử thao tác được lưu trong SQLite.
-- Chức năng mở tủ hiện là mô phỏng: `locker_service.py` chỉ ghi log và trả `True`.
-- Repo hiện không chứa firmware ESP32; phần cứng thật chưa được tích hợp trong mã nguồn này.
+- Điều khiển tủ qua **MQTT** + mô phỏng **ESP32 trên Wokwi** (`wokwi/`).
+- Dashboard `/dashboard` — gửi/lấy đồ thủ công không cần khuôn mặt.
 
 ## Cấu trúc chính
 
@@ -18,8 +18,11 @@
 | `face_api.py` | API gửi đồ, lấy đồ, trạng thái tủ, lịch sử và dashboard thao tác thủ công |
 | `database.py` | SQLite cho `lockers`, `deposits`, `logs` |
 | `face_utils.py` | Chuyển ảnh, chống giả mạo, trích embedding ArcFace, so khớp cosine |
-| `locker_service.py` | Lớp mô phỏng mở tủ |
-| `config.py` | Số lượng tủ, ngưỡng so khớp, anti-spoof và các ràng buộc hình học |
+| `locker_service.py` | Mở tủ qua MQTT hoặc mock |
+| `mqtt_service.py` | Bridge MQTT ↔ Wokwi |
+| `config.py` | Tủ, MQTT, nhận diện khuôn mặt |
+| `wokwi/sketch.ino` | Firmware ESP32 (3 tủ, LED, servo, LCD) |
+| `wokwi/diagram.json` | Sơ đồ Wokwi |
 | `static/index.html` | Trang xác thực khuôn mặt |
 | `static/dashboard.html` | Trang dashboard thao tác thủ công |
 | `static/styles.css` | CSS của giao diện |
@@ -48,6 +51,15 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 Mở trình duyệt tại `http://localhost:8000` cho màn xác thực, hoặc `http://localhost:8000/dashboard` cho dashboard điều khiển thủ công.
+
+Không dùng `--reload` khi test MQTT.
+
+### Wokwi (ESP32)
+
+1. Mở [wokwi.com](https://wokwi.com) → import thư mục `wokwi/`.
+2. `MQTT_TOPIC_PREFIX` trong `sketch.ino` phải trùng `config.py` (`smart-locker/demo`).
+3. Start simulation → Serial: `MQTT OK`.
+4. Tủ đang sử dụng → LED sáng liên tục; gửi đồ/lấy đồ từ web hoặc dashboard.
 
 ## Luồng nghiệp vụ hiện tại
 
