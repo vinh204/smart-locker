@@ -89,16 +89,16 @@ void updateLcdForOccupancy() {
   }
 
   if (emptyCount == LOCKER_COUNT) {
-    setLcd("3 tủ sẵn sàng", "Gửi đồ / Lấy đồ");
+    setLcd("3 tu san sang", "Gui do / Lay do");
     return;
   }
 
   if (emptyCount == 0) {
-    setLcd("Hết tủ trống", "Vui lòng đợi");
+    setLcd("Het tu trong", "Vui long doi");
     return;
   }
 
-  setLcd(String(emptyCount) + " tủ trống", "Gửi đồ / Lấy đồ");
+  setLcd(String(emptyCount) + " tu trong", "Gui do / Lay do");
 }
 
 void setLockerInUse(int lockerId, bool inUse) {
@@ -129,24 +129,24 @@ void handleOccupancy(byte* payload, unsigned int length) {
 void lcdForOpen(const char* action, int lockerId) {
   String tu = "TU " + String(lockerId);
   if (strcmp(action, "GUI_DO") == 0) {
-    setLcd("Gửi đồ - " + tu, "Đặt đồ vào tủ");
+    setLcd("Gui do - " + tu, "Dat do vao tu");
   } else if (strcmp(action, "LAY_DO") == 0) {
-    setLcd("Lấy đồ - " + tu, "Lấy đồ ra");
+    setLcd("Lay do - " + tu, "Lay do ra");
   } else if (strcmp(action, "MANUAL") == 0) {
-    setLcd("MỞ THỦ CÔNG", tu);
+    setLcd("MO THU CONG", tu);
   } else {
-    setLcd(">>> MỞ " + tu, "Đang mở...");
+    setLcd(">>> MO " + tu, "Dang mo...");
   }
 }
 
 void lcdForClosed(const char* action, int lockerId) {
   String tu = "Tu " + String(lockerId);
   if (strcmp(action, "GUI_DO") == 0) {
-    setLcd(tu + " đã đóng", "Đang sử dụng");
+    setLcd(tu + " da dong", "Dang su dung");
   } else if (strcmp(action, "LAY_DO") == 0) {
-    setLcd("Lấy đồ xong", tu + " trống");
+    setLcd("Lay do xong", tu + " trong");
   } else {
-    setLcd(tu + " đã đóng", "Sẵn sàng");
+    setLcd(tu + " da dong", "San sang");
   }
 }
 
@@ -303,7 +303,7 @@ bool ensureMqtt() {
   mqttClient.subscribe(topicCommandSubscription().c_str(), 1);
   mqttClient.subscribe(topicOccupancy().c_str(), 1);
   publishDeviceStatus(true);
-  setLcd("Hệ thống sẵn sàng", "Gửi đồ / Lấy đồ");
+  setLcd("He thong san sang", "Gui do / Lay do");
   return true;
 }
 
