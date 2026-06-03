@@ -1,138 +1,358 @@
 # Smart Locker
 
-Dự án demo hệ thống tủ đồ thông minh kết hợp nhận diện khuôn mặt và điều khiển tủ qua MQTT.
+Hệ thống tủ đồ thông minh dùng nhận diện khuôn mặt để gửi và lấy đồ, kèm mô phỏng ESP32 trên Wokwi qua MQTT.
 
-Ứng dụng gồm:
-- Backend FastAPI xử lý xác thực ảnh, chống giả mạo và so khớp khuôn mặt.
-- SQLite lưu trạng thái tủ, phiên gửi/lấy đồ và lịch sử thao tác.
-- Frontend web xác thực bằng webcam và dashboard điều khiển thủ công.
-- Cầu nối MQTT đến Wokwi ESP32 mô phỏng `LED`, `LCD`, `buzzer` và `3 servo` tương ứng 3 tủ.
+Project hiện có 3 phần chạy cùng nhau:
 
-## Trạng thái repo hiện tại
+- Backend `FastAPI` xử lý xác thực khuôn mặt, chống giả mạo, quản lý trạng thái tủ và cung cấp API.
+- Frontend web dùng webcam để tự chụp khuôn mặt và điều khiển luồng gửi đồ/lấy đồ.
+- Mô phỏng `ESP32` trên `Wokwi` nhận lệnh mở tủ qua MQTT, điều khiển `servo`, `LED`, `LCD`, `buzzer`.
 
-- `main.py` khởi tạo FastAPI, mount `static/` và mở 2 trang chính `/` và `/dashboard`.
-- `face_api.py` cung cấp API gửi đồ, lấy đồ, trạng thái tủ và chức năng điều khiển thủ công.
-- `database.py` quản lý SQLite với các bảng: `lockers`, `deposits`, `logs`.
-- `face_utils.py` chuyển ảnh, trích embedding ArcFace, so khớp cosine và kiểm tra anti-spoof.
-- `locker_service.py` mở tủ qua MQTT hoặc chế độ mock.
-- `mqtt_service.py` là cầu nối MQTT, publish lệnh mở tủ và đồng bộ trạng thái occupancy.
-- `config.py` chứa cấu hình MQTT, số lượng tủ, nhận diện khuôn mặt và chế độ điều khiển.
-- `wokwi/sketch.ino` là firmware ESP32 mô phỏng (LED/LCD/buzzer/3 servo).
-- `wokwi/diagram.json` là sơ đồ phần cứng Wokwi.
+## Tính năng hiện có
 
-## Cấu trúc chính
+- Gửi đồ bằng khuôn mặt qua trang `/`.
+- Lấy đồ bằng khuôn mặt qua trang `/`.
+- Tự động chụp khi khuôn mặt đứng ổn định trong khung.
+- Dùng `DeepFace` + `ArcFace` để trích xuất embedding và so khớp.
+- Kiểm tra chống giả mạo (`anti-spoof`) nếu bật trong cấu hình.
+- Kiểm tra thêm hình học khuôn mặt: kích thước mặt, tỉ lệ mặt, góc nghiêng đầu.
+- Một người có thể đang dùng nhiều tủ:
+  - Khi gửi thêm đồ, hệ thống hỏi muốn lấy đồ cũ hay mở tủ mới.
+  - Khi lấy đồ, hệ thống có thể cho chọn một tủ hoặc mở tất cả tủ khớp.
+- Dashboard `/dashboard` cho thao tác thủ công:
+  - đánh dấu gửi đồ thủ công
+  - đánh dấu lấy đồ thủ công
+  - theo dõi trạng thái tủ và kết nối ESP32
+- Đồng bộ trạng thái tủ từ SQLite sang ESP32 qua MQTT.
+- Lưu lịch sử thao tác trong SQLite.
 
-| Tệp | Vai trò |
-|-----|--------|
-| `main.py` | Khởi tạo FastAPI, mount `static/`, trang index và dashboard |
-| `face_api.py` | Router `/face` xử lý gửi đồ, lấy đồ, trạng thái, logs, dashboard thủ công |
-| `database.py` | SQLite cho `lockers`, `deposits`, `logs` |
-| `face_utils.py` | Xử lý ảnh, chống giả mạo, trích embedding và so khớp |
-| `locker_service.py` | Mở tủ qua MQTT hoặc mock |
-| `mqtt_service.py` | Cầu nối MQTT, publish lệnh, subscribe trạng thái, đồng bộ occupancy |
-| `config.py` | Cấu hình tủ, MQTT, nhận diện khuôn mặt |
-| `wokwi/sketch.ino` | Firmware ESP32 mô phỏng Wokwi (LED/LCD/buzzer/3 servo) |
-| `wokwi/diagram.json` | Sơ đồ phần cứng mô phỏng Wokwi |
-| `static/index.html` | Trang xác thực khuôn mặt |
-| `static/dashboard.html` | Dashboard điều khiển thủ công |
-| `static/styles.css` | CSS giao diện |
-| `static/app.js` | Logic frontend xác thực khuôn mặt |
-| `static/dashboard.js` | Logic frontend dashboard |
-| `face_db.sqlite` | Database SQLite chứa trạng thái tủ và logs |
+## Kiến trúc nhanh
 
-## Yêu cầu
+```text
+Webcam/Browser
+    -> static/index.html + static/app.js
+    -> POST /face/gui-do | /face/lay-do
+    -> face_api.py
+    -> face_utils.py
+    -> database.py (SQLite)
+    -> locker_service.py
+    -> mqtt_service.py
+    -> broker.hivemq.com
+    -> Wokwi ESP32 (wokwi/sketch.ino)
+```
+
+## Cấu trúc thư mục
+
+```text
+smart-locker/
+|- main.py                 # Khởi tạo FastAPI, mount static, mở / và /dashboard
+|- face_api.py             # API gửi đồ, lấy đồ, logs, trạng thái, thao tác thủ công
+|- face_utils.py           # Anti-spoof, kiểm tra hình học, embedding, so khớp
+|- database.py             # SQLite: lockers, deposits, logs
+|- locker_service.py       # Chọn cách mở tủ: MQTT hoặc mock
+|- mqtt_service.py         # Bridge MQTT, ACK lệnh mở, heartbeat thiết bị
+|- config.py               # Cấu hình tủ, MQTT, ngưỡng nhận diện
+|- requirements.txt
+|- static/
+|  |- index.html           # Màn hình xác thực khuôn mặt
+|  |- app.js               # Luồng webcam, auto-scan, gọi API
+|  |- dashboard.html       # Dashboard vận hành
+|  |- dashboard.js         # Thao tác thủ công và theo dõi trạng thái
+|  |- styles.css
+|- wokwi/
+|  |- sketch.ino           # Firmware ESP32 mô phỏng
+|  |- diagram.json         # Sơ đồ phần cứng Wokwi
+|  |- libraries.txt
+```
+
+File `face_db.sqlite` sẽ được tạo tự động khi chạy ứng dụng lần đầu.
+
+## Công nghệ sử dụng
 
 - Python 3.11+
-- Windows / Linux / Mac
-- Mạng để tải model DeepFace lần đầu và file `face-api.js` từ CDN
+- FastAPI + Uvicorn
+- DeepFace
+- TensorFlow
+- PyTorch
+- OpenCV
+- SQLite
+- MQTT với `paho-mqtt`
+- Frontend thuần HTML/CSS/JavaScript
+- `@vladmandic/face-api` tải từ CDN để hỗ trợ phát hiện mặt trên trình duyệt
 
-Cài đặt:
+## Cài đặt
 
-```bash
-cd d:\PYTHON\smart-locker
+### Windows PowerShell
+
+```powershell
+cd D:\PYTHON\smart-locker
 python -m venv .venv
-.venv\Scripts\activate
+.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
-## Chạy server
+### Linux / macOS
+
+```bash
+cd /path/to/smart-locker
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+## Chạy ứng dụng
+
+### Cách 1: chạy bằng Uvicorn
 
 ```bash
 uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
-Mở trình duyệt:
-- `http://localhost:8000` — giao diện xác thực khuôn mặt
-- `http://localhost:8000/dashboard` — dashboard thủ công
+Khuyến nghị không dùng `--reload` khi đang test cùng MQTT/Wokwi để tránh phát sinh nhiều tiến trình backend và làm kết nối MQTT bị lặp.
 
-> Không cần dùng `--reload` khi chạy cùng mô phỏng MQTT/Wokwi.
+### Cách 2: chạy trực tiếp file Python
+
+```bash
+python main.py
+```
+
+Mở trình duyệt:
+
+- `http://localhost:8000` -> giao diện xác thực khuôn mặt
+- `http://localhost:8000/dashboard` -> dashboard vận hành thủ công
 
 ## Chế độ điều khiển tủ
 
-Backend hỗ trợ 2 chế độ:
+Ứng dụng có 2 chế độ:
 
-- `mqtt` — gửi lệnh mở tủ qua MQTT đến Wokwi ESP32
-- `mock` — chỉ log thao tác, không cần MQTT
+- `mqtt`: gửi lệnh mở tủ thật sang ESP32/Wokwi qua MQTT
+- `mock`: chỉ log thao tác mở tủ, không cần MQTT
 
-Mặc định `LOCKER_CONTROL_MODE=mqtt`. Đổi sang mock bằng biến môi trường:
+Mặc định đang là `mqtt`.
 
-```bash
-set LOCKER_CONTROL_MODE=mock
+### Đổi sang mock trên PowerShell
+
+```powershell
+$env:LOCKER_CONTROL_MODE = "mock"
+uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
-## Wokwi và MQTT
+### Đổi sang mock trên CMD
 
-Wokwi hiện mô phỏng ESP32 với `LED`, `LCD`, `buzzer` và `3 servo` đại diện cơ cấu mở cho 3 tủ.
+```cmd
+set LOCKER_CONTROL_MODE=mock
+uvicorn main:app --host 0.0.0.0 --port 8000
+```
 
-Khi backend gửi lệnh mở tủ thành công, servo của tủ tương ứng sẽ quay `90°`, giữ trong `5 giây`, rồi quay về `0°`.
+### Đổi sang mock trên Bash
 
-Để chạy mô phỏng Wokwi:
+```bash
+export LOCKER_CONTROL_MODE=mock
+uvicorn main:app --host 0.0.0.0 --port 8000
+```
 
-1. Mở [wokwi.com](https://wokwi.com).
+## Cấu hình chính
+
+Các cấu hình hiện nằm trong `config.py`:
+
+- `LOCKER_COUNT = 3`: số tủ mặc định.
+- `LOCKER_CONTROL_MODE = "mqtt"`: chế độ mở tủ.
+- `MQTT_BROKER_HOST = "broker.hivemq.com"`: broker công khai đang dùng.
+- `MQTT_TOPIC_PREFIX = "smart-locker/demo"`: prefix topic giữa backend và ESP32.
+- `VERIFY_THRESHOLD = 0.68`: ngưỡng so khớp embedding.
+- `ENABLE_ANTI_SPOOF = True`: bật chống giả mạo.
+- `DETECTOR_BACKEND = "opencv"`: backend phát hiện mặt cho DeepFace.
+
+Nếu nhiều nhóm cùng dùng broker công khai, nên đổi `MQTT_TOPIC_PREFIX` để tránh đụng topic.
+
+## Luồng nghiệp vụ thực tế
+
+### 1. Gửi đồ
+
+1. Người dùng mở camera ở trang chính.
+2. Frontend dùng `face-api.js` để dò mặt và tự chụp khi mặt đứng ổn định trong khung.
+3. Ảnh được gửi lên `POST /face/gui-do`.
+4. Backend:
+   - đọc ảnh
+   - chống giả mạo nếu đang bật
+   - trích xuất embedding bằng `ArcFace`
+   - kiểm tra xem người này đã có phiên gửi đồ nào đang hoạt động chưa
+5. Nếu người dùng đã gửi trước đó, API trả về lựa chọn:
+   - lấy đồ cũ
+   - mở tủ mới để gửi thêm
+6. Nếu hợp lệ và còn tủ trống, hệ thống:
+   - chọn tủ trống đầu tiên
+   - lưu phiên gửi đồ vào SQLite
+   - cập nhật trạng thái occupancy
+   - gửi lệnh mở tủ
+
+### 2. Lấy đồ
+
+1. Ảnh được gửi lên `POST /face/lay-do`.
+2. Backend so khớp embedding với tất cả phiên gửi đồ còn hoạt động.
+3. Nếu khớp nhiều tủ, frontend hiển thị lựa chọn:
+   - mở một tủ cụ thể
+   - mở tất cả tủ của người dùng
+4. Khi xác thực thành công, hệ thống:
+   - đánh dấu phiên gửi đồ là đã lấy
+   - giải phóng tủ trong SQLite
+   - gửi lệnh mở tủ
+
+### 3. Dashboard thủ công
+
+Trang `/dashboard` hiện cho phép:
+
+- chọn một tủ từ lưới
+- gửi đồ thủ công nếu tủ đang trống
+- lấy đồ thủ công nếu tủ đang bận
+- xem tổng số tủ, số tủ bận, số tủ trống
+- xem trạng thái kết nối ESP32
+
+Lưu ý: API có sẵn endpoint mở tủ trực tiếp `POST /face/open-locker/{locker_id}`, nhưng giao diện dashboard hiện tại chưa có nút gọi trực tiếp endpoint này.
+
+## API hiện có
+
+### Trạng thái và lịch sử
+
+- `GET /face/status`
+  - Trả về số tủ tổng, số tủ trống, số tủ đang dùng, danh sách tủ, trạng thái MQTT/ESP32.
+- `GET /face/logs?limit=5`
+  - Trả về lịch sử thao tác gần nhất.
+
+### Xác thực khuôn mặt
+
+- `POST /face/gui-do`
+  - Form hỗ trợ:
+    - `file`: ảnh upload
+    - `image`: ảnh base64 từ webcam
+    - `intent`: nếu là `new` thì bỏ qua cảnh báo đã gửi trước đó và tạo phiên gửi mới
+- `POST /face/lay-do`
+  - Form hỗ trợ:
+    - `file`: ảnh upload
+    - `image`: ảnh base64 từ webcam
+    - `locker_id`: chọn đúng tủ cần lấy khi có nhiều kết quả khớp
+    - `open_all`: mở tất cả tủ khớp
+
+### Thao tác thủ công
+
+- `POST /face/manual/gui-do/{locker_id}`
+- `POST /face/manual/lay-do/{locker_id}`
+- `POST /face/open-locker/{locker_id}`
+
+## Database
+
+SQLite được quản lý trong `database.py` với 3 bảng:
+
+- `lockers`: trạng thái từng tủ
+- `deposits`: phiên gửi đồ, embedding, thời gian tạo, trạng thái
+- `logs`: lịch sử thao tác, kết quả, thông báo, thời gian
+
+Các trạng thái đang dùng:
+
+- Tủ:
+  - `trong`
+  - `dang_su_dung`
+- Phiên gửi đồ:
+  - `dang_su_dung`
+  - `da_lay`
+
+## MQTT và Wokwi
+
+### Backend MQTT đang làm gì
+
+- Kết nối broker bằng `paho-mqtt`.
+- Subscribe:
+  - `smart-locker/demo/lockers/+/status`
+  - `smart-locker/demo/device/status`
+- Publish:
+  - `smart-locker/demo/lockers/{id}/command`
+  - `smart-locker/demo/lockers/occupancy`
+- Chờ ACK từ ESP32 sau khi gửi lệnh mở tủ.
+- Theo dõi heartbeat để suy ra `device_online`.
+
+### Firmware Wokwi đang làm gì
+
+File `wokwi/sketch.ino` hiện mô phỏng:
+
+- `3 LED` tương ứng 3 tủ
+- `3 servo` mở/đóng cửa tủ
+- `LCD 16x2`
+- `buzzer`
+
+Hành vi chính:
+
+- Khi nhận lệnh mở tủ, servo quay từ `0` đến `90` độ, giữ `5 giây`, rồi đóng lại.
+- `GUI_DO` làm tủ chuyển sang trạng thái đang sử dụng.
+- `LAY_DO` làm tủ trở lại trạng thái trống.
+- LCD hiển thị trạng thái theo nghiệp vụ gửi đồ/lấy đồ.
+- Thiết bị gửi heartbeat định kỳ lên MQTT.
+
+### Chạy mô phỏng Wokwi
+
+1. Mở `https://wokwi.com`.
 2. Import thư mục `wokwi/`.
 3. Chạy mô phỏng.
-4. `wokwi/sketch.ino` và `config.py` phải cùng `MQTT_TOPIC_PREFIX` là `smart-locker/demo`.
-5. Khi backend và ESP32 kết nối, dashboard sẽ hiển thị trạng thái MQTT và ESP.
+4. Đảm bảo backend và `sketch.ino` dùng cùng:
+   - `MQTT_HOST`
+   - `MQTT_PORT`
+   - `MQTT_TOPIC_PREFIX`
+5. Chạy backend ở chế độ `mqtt`.
+6. Mở `/` hoặc `/dashboard` để kiểm tra trạng thái kết nối.
 
-## Luồng nghiệp vụ
+## Phụ thuộc mạng và tải model
 
-### Gửi đồ
+Lần chạy đầu hoặc lúc demo, project có thể cần mạng cho các phần sau:
 
-1. Người dùng mở camera trên trang chính.
-2. Ảnh được gửi đến endpoint `POST /face/gui-do`.
-3. Backend kiểm tra anti-spoof và trích xuất embedding.
-4. Nếu có tủ trống, hệ thống gán tủ, tạo phiên gửi đồ, đồng bộ occupancy và mở tủ.
-5. Nếu người dùng đã gửi đồ trước đó, hệ thống sẽ yêu cầu chọn mở tủ hiện có hoặc mở tủ mới.
+- `DeepFace` tải model cần thiết.
+- `face-api.js` và model trình duyệt tải từ CDN.
+- MQTT public broker `broker.hivemq.com`.
+- Wokwi chạy trên nền web.
 
-### Lấy đồ
+## Một số lỗi dễ gặp
 
-1. Người dùng gửi ảnh lên `POST /face/lay-do`.
-2. Backend so khớp embedding với các phiên gửi đồ đang hoạt động.
-3. Nếu nhiều tủ phù hợp, frontend yêu cầu chọn tủ hoặc mở tất cả.
-4. Khi xác thực thành công, tủ được mở và phiên gửi đồ hoàn tất.
+### Camera không mở được
 
-### Điều khiển thủ công
+- Kiểm tra quyền camera của trình duyệt.
+- Dùng `https` hoặc `localhost` nếu trình duyệt chặn camera ở origin không an toàn.
 
-Dashboard cho phép:
-- Chọn tủ
-- Gửi đồ thủ công (`POST /face/manual/gui-do/{locker_id}`)
-- Lấy đồ thủ công (`POST /face/manual/lay-do/{locker_id}`)
-- Mở tủ trực tiếp (`POST /face/open-locker/{locker_id}`)
+### Chống giả mạo báo lỗi PyTorch
 
-## API chính
+`face_utils.py` đang yêu cầu `torch` khi `ENABLE_ANTI_SPOOF = True`.
 
-- `GET /face/status` — trả trạng thái tủ, số lượng trống/đang dùng, `esp_connected`, trạng thái MQTT.
-- `GET /face/logs` — trả lịch sử thao tác.
-- `POST /face/gui-do` — gửi đồ bằng ảnh camera/file upload.
-- `POST /face/lay-do` — lấy đồ bằng ảnh camera/file upload.
-- `POST /face/manual/gui-do/{locker_id}` — gửi đồ thủ công.
-- `POST /face/manual/lay-do/{locker_id}` — lấy đồ thủ công.
-- `POST /face/open-locker/{locker_id}` — mở tủ trực tiếp để kiểm tra.
+Nếu máy yếu hoặc chưa cài đúng môi trường, có 2 hướng:
 
-## Ghi chú kỹ thuật
+- cài đủ dependency từ `requirements.txt`
+- tạm đổi `ENABLE_ANTI_SPOOF = False` trong `config.py` để demo luồng cơ bản
 
-- `LOCKER_COUNT` mặc định là `3`.
-- `VERIFY_THRESHOLD` dùng để so khớp cosine embedding.
-- `ENABLE_ANTI_SPOOF = True` yêu cầu model và dependency đủ.
-- `mqtt_service.py` đồng bộ occupancy từ database và nhận trạng thái ESP32 qua MQTT.
-- `wokwi/sketch.ino` mô phỏng ESP32, cập nhật LCD/LED và điều khiển 3 servo theo lệnh mở tủ.
+### ESP32 không hiện đã kết nối
+
+- Kiểm tra backend có chạy ở `LOCKER_CONTROL_MODE=mqtt`.
+- Kiểm tra Wokwi đang chạy.
+- Kiểm tra `MQTT_TOPIC_PREFIX` có khớp giữa `config.py` và `wokwi/sketch.ino`.
+- Nếu dùng broker công khai, thử đổi prefix topic riêng.
+
+## Gợi ý demo nhanh
+
+### Demo không cần Wokwi
+
+1. Chuyển sang `LOCKER_CONTROL_MODE=mock`.
+2. Chạy backend.
+3. Mở `/`.
+4. Thử gửi đồ và lấy đồ bằng camera.
+
+### Demo đầy đủ với Wokwi
+
+1. Chạy backend ở chế độ `mqtt`.
+2. Mở mô phỏng Wokwi.
+3. Chờ trạng thái ESP32 chuyển sang đã kết nối.
+4. Dùng trang `/` để gửi đồ/lấy đồ.
+5. Theo dõi LED, LCD, servo và buzzer trên Wokwi.
+
+## Tệp quan trọng nên đọc khi phát triển tiếp
+
+- `face_api.py`: nắm toàn bộ luồng nghiệp vụ.
+- `face_utils.py`: logic AI và kiểm tra khuôn mặt.
+- `mqtt_service.py`: giao tiếp backend <-> ESP32.
+- `static/app.js`: trải nghiệm người dùng ở màn hình chính.
+- `static/dashboard.js`: điều khiển vận hành thủ công.
+- `wokwi/sketch.ino`: hành vi phần cứng mô phỏng.

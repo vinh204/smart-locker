@@ -128,7 +128,7 @@ function updateCamUI() {
   cameraBox.classList.remove("frozen");
   camSnapshot.removeAttribute("src");
   if (faceModelsReady) {
-    camStatus.textContent = "Nhìn vào giữa khung — bấm Gửi/Lấy đồ";
+    camStatus.textContent = "Nhìn vào giữa khung và chọn Gửi đồ hoặc lấy đồ";
     return;
   }
   camStatus.textContent = "Camera sẵn sàng";
@@ -417,15 +417,15 @@ function showNotifyFromApi(data, actionLabel) {
   if (data.ok) {
     const lockerTxt = data.locker_id ? "Tủ " + data.locker_id : "—";
     let detail = data.message || "Xác thực thành công";
-    if (data.confidence != null) detail += ` · Tin cậy ${data.confidence}%`;
+    if (data.confidence != null) detail += ` Tin cậy ${data.confidence}%`;
     setNotify("success", {
       result: "Xác thực thành công",
       locker: lockerTxt,
       detail,
       lockerClass: "success",
       action: data.locker_id
-        ? `Tủ số ${data.locker_id} đã mở — có thể thao tác tiếp`
-        : `${actionLabel} thành công — có thể thao tác tiếp`,
+        ? `Tủ số ${data.locker_id} đã mở - có thể thao tác tiếp`
+        : `${actionLabel} thành công - có thể thao tác tiếp`,
     });
     return;
   }
@@ -566,7 +566,7 @@ async function loadFaceModels() {
     await faceapi.nets.tinyFaceDetector.loadFromUri(FACE_MODEL_URL);
     faceModelsReady = true;
     if (cameraActive) {
-      camStatus.textContent = "Nhìn vào giữa khung — bấm Gửi/Lấy đồ";
+      camStatus.textContent = "Nhìn vào giữa khung - bấm Gửi/Lấy đồ";
     }
   } catch (e) {
     faceModelsReady = false;
@@ -695,7 +695,7 @@ function startAutoScan(url, actionLabel) {
   setNotify("idle", {
     result: "Đang quét khuôn mặt",
     locker: "",
-    detail: `Bấm lại «${actionLabel}» để hủy · Tự chụp khi mặt ở giữa khung`,
+    detail: `Bấm lại «${actionLabel}» để hủy. Tự chụp khi mặt ở giữa khung`,
     action: "Đưa mặt vào giữa khung xanh",
   });
   camStatus.textContent = "Đưa khuôn mặt vào giữa khung";
@@ -764,7 +764,7 @@ async function submitFaceApi(url, actionLabel) {
 
   setNotify("loading", {
     result: "Đang xác thực…",
-    detail: "AI đang phân tích ảnh vừa chụp",
+    detail: "Đang phân tích ảnh vừa chụp",
     action: "Vui lòng đợi",
   });
 
