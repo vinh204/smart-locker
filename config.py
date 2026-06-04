@@ -1,13 +1,13 @@
 import os
 
-# Số ô tủ trong hệ thống
+# So o tu trong he thong
 LOCKER_COUNT = 3
 
-# "mqtt" — Wokwi/ESP32 | "mock" — chỉ log
+# "mqtt" -> Wokwi/ESP32 | "mock" -> chi log
 _mode = os.environ.get("LOCKER_CONTROL_MODE", "mqtt").strip().lower()
 LOCKER_CONTROL_MODE = _mode if _mode in ("mqtt", "mock") else "mqtt"
 
-# MQTT (khớp wokwi/sketch.ino)
+# MQTT (khop voi wokwi/sketch.ino)
 MQTT_BROKER_HOST = "broker.hivemq.com"
 MQTT_BROKER_PORT = 1883
 MQTT_BROKER_USERNAME = ""
@@ -19,14 +19,18 @@ MQTT_BROKER_KEEPALIVE_SEC = 30
 MQTT_ACK_TIMEOUT_SEC = 4.0
 MQTT_DEVICE_TIMEOUT_SEC = 20.0
 
-# Ngưỡng cosine distance khi so khớp embedding (ArcFace)
+# Khoa ma hoa embedding luu trong SQLite.
+# Khuyen nghi dat bang bien moi truong EMBEDDING_ENCRYPTION_KEY.
+EMBEDDING_ENCRYPTION_KEY = os.environ.get("EMBEDDING_ENCRYPTION_KEY", "").strip()
+
+# Nguong cosine distance khi so khop embedding (ArcFace)
 VERIFY_THRESHOLD = 0.68
 
-# Nhận diện khuôn mặt
+# Nhan dien khuon mat
 DETECTOR_BACKEND = "opencv"
 ENABLE_ANTI_SPOOF = True
 
-# Kiểm tra hình học khuôn mặt
+# Kiem tra hinh hoc khuon mat
 MAX_HEAD_TILT_DEG = 15.0
 MIN_FACE_RATIO = 0.55
 MAX_FACE_RATIO = 1.35

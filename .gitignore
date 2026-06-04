@@ -6,3 +6,4 @@ face_db/
 *.jpg
 *.png
 .DS_Store
+.embedding_fernet.key

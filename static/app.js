@@ -155,7 +155,7 @@ function syncLockerAvailabilityNotice() {
       detail: "Hiện không còn tủ trống. Vui lòng lấy đồ trước khi gửi tiếp.",
       action: lockerState.can_lay_do
         ? "Bạn vẫn có thể bấm Lấy đồ"
-        : "Mở Dashboard để trả tủ",
+        : "Hiện chưa thể gửi thêm. Vui lòng lấy đồ trước.",
     });
     return;
   }
@@ -181,7 +181,7 @@ function describeFaceAuthError(message) {
     return {
       result: "Hết tủ trống",
       detail: msg,
-      action: "Mở Dashboard để trả tủ hoặc lấy đồ trước",
+      action: "Vui lòng lấy đồ trước khi gửi thêm",
     };
   }
 
@@ -657,7 +657,7 @@ function startAutoScan(url, actionLabel) {
       detail: "Hiện không còn tủ trống. Vui lòng lấy đồ trước khi gửi tiếp.",
       action: lockerState.can_lay_do
         ? "Bạn vẫn có thể bấm Lấy đồ"
-        : "Mở Dashboard để trả tủ",
+        : "Hiện chưa thể gửi thêm. Vui lòng lấy đồ trước.",
     });
     return;
   }

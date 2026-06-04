@@ -105,20 +105,6 @@ body {
   gap: 0.4rem;
 }
 
-.btn-power {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  border: none;
-  background: var(--blue-dim);
-  color: var(--blue);
-  cursor: pointer;
-  font-size: 0.95rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
 .main {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -707,34 +693,6 @@ body {
 .btn-manual-lay {
   background: var(--green);
   color: #0c1220;
-}
-
-.dashboard-main {
-  max-width: 1320px;
-  margin: 0 auto;
-  padding: 1.1rem 1.5rem 1.5rem;
-}
-
-.dashboard-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.9fr);
-  gap: 1rem;
-}
-
-.dashboard-side .card,
-.dashboard-col-main .card {
-  margin-bottom: 1rem;
-}
-
-.dashboard-side .card:last-child,
-.dashboard-col-main .card:last-child {
-  margin-bottom: 0;
-}
-
-@media (max-width: 980px) {
-  .dashboard-layout {
-    grid-template-columns: 1fr;
-  }
 }
 
 .history-list {

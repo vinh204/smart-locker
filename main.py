@@ -48,11 +48,6 @@ async def index():
     return render_page("index.html")
 
 
-@app.get("/dashboard", response_class=HTMLResponse)
-async def dashboard():
-    return render_page("dashboard.html")
-
-
 if __name__ == "__main__":
     import uvicorn
 

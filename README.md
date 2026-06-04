@@ -19,10 +19,6 @@ Project hiện có 3 phần chạy cùng nhau:
 - Một người có thể đang dùng nhiều tủ:
   - Khi gửi thêm đồ, hệ thống hỏi muốn lấy đồ cũ hay mở tủ mới.
   - Khi lấy đồ, hệ thống có thể cho chọn một tủ hoặc mở tất cả tủ khớp.
-- Dashboard `/dashboard` cho thao tác thủ công:
-  - đánh dấu gửi đồ thủ công
-  - đánh dấu lấy đồ thủ công
-  - theo dõi trạng thái tủ và kết nối ESP32
 - Đồng bộ trạng thái tủ từ SQLite sang ESP32 qua MQTT.
 - Lưu lịch sử thao tác trong SQLite.
 
@@ -45,7 +41,7 @@ Webcam/Browser
 
 ```text
 smart-locker/
-|- main.py                 # Khởi tạo FastAPI, mount static, mở / và /dashboard
+|- main.py                 # Khởi tạo FastAPI, mount static, mở trang chính /
 |- face_api.py             # API gửi đồ, lấy đồ, logs, trạng thái, thao tác thủ công
 |- face_utils.py           # Anti-spoof, kiểm tra hình học, embedding, so khớp
 |- database.py             # SQLite: lockers, deposits, logs
@@ -56,8 +52,6 @@ smart-locker/
 |- static/
 |  |- index.html           # Màn hình xác thực khuôn mặt
 |  |- app.js               # Luồng webcam, auto-scan, gọi API
-|  |- dashboard.html       # Dashboard vận hành
-|  |- dashboard.js         # Thao tác thủ công và theo dõi trạng thái
 |  |- styles.css
 |- wokwi/
 |  |- sketch.ino           # Firmware ESP32 mô phỏng
@@ -118,8 +112,7 @@ python main.py
 
 Mở trình duyệt:
 
-- `http://localhost:8000` -> giao diện xác thực khuôn mặt
-- `http://localhost:8000/dashboard` -> dashboard vận hành thủ công
+- `http://localhost:8000` -> giao diện xác thực khuôn mặt và theo dõi trạng thái tủ
 
 ## Chế độ điều khiển tủ
 
@@ -198,18 +191,6 @@ Nếu nhiều nhóm cùng dùng broker công khai, nên đổi `MQTT_TOPIC_PREFI
    - giải phóng tủ trong SQLite
    - gửi lệnh mở tủ
 
-### 3. Dashboard thủ công
-
-Trang `/dashboard` hiện cho phép:
-
-- chọn một tủ từ lưới
-- gửi đồ thủ công nếu tủ đang trống
-- lấy đồ thủ công nếu tủ đang bận
-- xem tổng số tủ, số tủ bận, số tủ trống
-- xem trạng thái kết nối ESP32
-
-Lưu ý: API có sẵn endpoint mở tủ trực tiếp `POST /face/open-locker/{locker_id}`, nhưng giao diện dashboard hiện tại chưa có nút gọi trực tiếp endpoint này.
-
 ## API hiện có
 
 ### Trạng thái và lịch sử
@@ -238,6 +219,8 @@ Lưu ý: API có sẵn endpoint mở tủ trực tiếp `POST /face/open-locker/
 - `POST /face/manual/gui-do/{locker_id}`
 - `POST /face/manual/lay-do/{locker_id}`
 - `POST /face/open-locker/{locker_id}`
+
+Ba endpoint trên hiện được giữ lại cho mục đích debug/nội bộ, nhưng không còn được gắn với một trang giao diện riêng.
 
 ## Database
 
@@ -297,7 +280,7 @@ Hành vi chính:
    - `MQTT_PORT`
    - `MQTT_TOPIC_PREFIX`
 5. Chạy backend ở chế độ `mqtt`.
-6. Mở `/` hoặc `/dashboard` để kiểm tra trạng thái kết nối.
+6. Mở `/` để kiểm tra trạng thái kết nối.
 
 ## Phụ thuộc mạng và tải model
 
@@ -354,5 +337,4 @@ Nếu máy yếu hoặc chưa cài đúng môi trường, có 2 hướng:
 - `face_utils.py`: logic AI và kiểm tra khuôn mặt.
 - `mqtt_service.py`: giao tiếp backend <-> ESP32.
 - `static/app.js`: trải nghiệm người dùng ở màn hình chính.
-- `static/dashboard.js`: điều khiển vận hành thủ công.
 - `wokwi/sketch.ino`: hành vi phần cứng mô phỏng.

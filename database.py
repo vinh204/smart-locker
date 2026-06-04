@@ -1,10 +1,14 @@
-import json
 import sqlite3
 import uuid
 from datetime import datetime
 from pathlib import Path
 
 from config import LOCKER_COUNT
+from embedding_crypto import (
+    deserialize_embedding,
+    is_encrypted_embedding,
+    serialize_embedding,
+)
 
 DB_PATH = Path(__file__).resolve().parent / "face_db.sqlite"
 
@@ -57,6 +61,7 @@ def init_db():
         conn.commit()
 
     _init_lockers()
+    _migrate_plaintext_embeddings()
 
 
 def _init_lockers():
@@ -71,6 +76,32 @@ def _init_lockers():
             (LOCKER_COUNT, STATUS_LOCKER_EMPTY),
         )
         conn.commit()
+
+
+def _migrate_plaintext_embeddings() -> None:
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT id, embedding
+            FROM deposits
+            WHERE embedding IS NOT NULL
+            """
+        ).fetchall()
+
+        changed = False
+        for row in rows:
+            raw_embedding = row["embedding"]
+            if is_encrypted_embedding(raw_embedding):
+                continue
+            embedding = deserialize_embedding(raw_embedding)
+            conn.execute(
+                "UPDATE deposits SET embedding = ? WHERE id = ?",
+                (serialize_embedding(embedding), row["id"]),
+            )
+            changed = True
+
+        if changed:
+            conn.commit()
 
 
 def count_empty_lockers() -> int:
@@ -120,17 +151,18 @@ def get_locker(locker_id: int) -> dict | None:
         "id": int(row["id"]),
         "status": row["status"],
         "is_empty": empty,
-        "label": "Trống" if empty else "Đang sử dụng",
+        "label": "Trong" if empty else "Dang su dung",
     }
 
 
 def start_deposit(embedding: list[float]) -> tuple[str, int] | None:
     """
-    Gán ô trống + lưu embedding trong một giao dịch.
-    Trả (deposit_id, locker_id) hoặc None nếu hết tủ.
+    Gan o trong va luu embedding trong mot giao dich.
+    Tra ve (deposit_id, locker_id) hoac None neu het tu.
     """
     deposit_id = str(uuid.uuid4())
     now = datetime.now().isoformat(timespec="seconds")
+    encrypted_embedding = serialize_embedding(embedding)
     with get_connection() as conn:
         row = conn.execute(
             "SELECT id FROM lockers WHERE status = ? ORDER BY id LIMIT 1",
@@ -153,7 +185,7 @@ def start_deposit(embedding: list[float]) -> tuple[str, int] | None:
             (
                 deposit_id,
                 locker_id,
-                json.dumps(embedding),
+                encrypted_embedding,
                 now,
                 STATUS_DEPOSIT_ACTIVE,
             ),
@@ -185,13 +217,13 @@ def get_active_deposits() -> list[dict]:
     result = []
     for row in rows:
         item = dict(row)
-        item["embedding"] = json.loads(item["embedding"])
+        item["embedding"] = deserialize_embedding(item["embedding"])
         result.append(item)
     return result
 
 
 def complete_deposit(deposit_id: str) -> int | None:
-    """Đánh dấu đã lấy đồ, xóa embedding, trả ô. Trả locker_id."""
+    """Danh dau da lay do, xoa embedding, tra o. Tra locker_id."""
     with get_connection() as conn:
         row = conn.execute(
             "SELECT locker_id FROM deposits WHERE id = ? AND status = ?",
@@ -255,7 +287,7 @@ def get_all_lockers() -> list[dict]:
                 "id": int(row["id"]),
                 "status": row["status"],
                 "is_empty": empty,
-                "label": "Trống" if empty else "Đang sử dụng",
+                "label": "Trong" if empty else "Dang su dung",
             }
         )
     return result
