@@ -36,8 +36,20 @@ def base64_to_cv2(image_b64: str) -> np.ndarray:
 def _save_temp(img: np.ndarray) -> str:
     fd, path = tempfile.mkstemp(suffix=".jpg")
     os.close(fd)
-    cv2.imwrite(path, img, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
+    if max(img.shape[:2]) > 640:
+        scale = 640.0 / max(img.shape[:2])
+        img = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+    cv2.imwrite(path, img, [int(cv2.IMWRITE_JPEG_QUALITY), 88])
     return path
+
+
+def warmup_face_model() -> None:
+    """Preload ArcFace model to reduce latency on the first verification."""
+    try:
+        DeepFace.build_model(MODEL_NAME)
+    except Exception:
+        # Keep startup resilient even if the warmup fails.
+        pass
 
 
 def _is_face_detection_error(exc: Exception) -> bool:

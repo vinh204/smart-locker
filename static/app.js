@@ -2,8 +2,11 @@ const IDLE_TITLE = "Xin chào!";
 const IDLE_DETAIL =
   "Bấm Gửi đồ hoặc Lấy đồ — hệ thống tự chụp khi mặt ở giữa khung";
 const IDLE_ACTION = "";
-const STABLE_NEEDED = 6;
-const SCAN_INTERVAL_MS = 120;
+const STABLE_NEEDED = 4;
+const SCAN_INTERVAL_MS = 90;
+const DETECTOR_INPUT_SIZE = 320;
+const DETECTOR_SCORE_THRESHOLD = 0.4;
+const CAPTURE_JPEG_QUALITY = 0.88;
 const FACE_MODEL_URL =
   "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.14/model";
 
@@ -100,7 +103,7 @@ function captureB64() {
   canvas.width = w;
   canvas.height = h;
   canvas.getContext("2d").drawImage(video, 0, 0, w, h);
-  return canvas.toDataURL("image/jpeg", 0.92);
+  return canvas.toDataURL("image/jpeg", CAPTURE_JPEG_QUALITY);
 }
 
 function stopCamera() {
@@ -617,8 +620,8 @@ async function tickAutoScan() {
     const detection = await faceapi.detectSingleFace(
       video,
       new faceapi.TinyFaceDetectorOptions({
-        inputSize: 416,
-        scoreThreshold: 0.45,
+        inputSize: DETECTOR_INPUT_SIZE,
+        scoreThreshold: DETECTOR_SCORE_THRESHOLD,
       })
     );
 

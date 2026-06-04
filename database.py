@@ -151,7 +151,7 @@ def get_locker(locker_id: int) -> dict | None:
         "id": int(row["id"]),
         "status": row["status"],
         "is_empty": empty,
-        "label": "Trong" if empty else "Dang su dung",
+        "label": "Trống" if empty else "Đang sử dụng",
     }
 
 
@@ -287,7 +287,7 @@ def get_all_lockers() -> list[dict]:
                 "id": int(row["id"]),
                 "status": row["status"],
                 "is_empty": empty,
-                "label": "Trong" if empty else "Dang su dung",
+                "label": "Trống" if empty else "Đang sử dụng",
             }
         )
     return result

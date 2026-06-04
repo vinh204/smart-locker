@@ -33,7 +33,7 @@ const int LCD_COLUMNS = 16;
 const int LCD_ROWS = 2;
 const int SERVO_CLOSED_ANGLE = 0;
 const int SERVO_OPEN_ANGLE = 90;
-const unsigned long SERVO_OPEN_HOLD_MS = 5000;
+const unsigned long SERVO_OPEN_HOLD_MS = 3000;
 
 WiFiClient wifiClient;
 PubSubClient mqttClient(wifiClient);
@@ -94,7 +94,7 @@ void updateLcdForOccupancy() {
   }
 
   if (emptyCount == LOCKER_COUNT) {
-    setLcd("3 tu san sang", "Gui do / Lay do");
+    setLcd("3 tu san sang", "Gui do");
     return;
   }
 

@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 import database as db
 from config import LOCKER_CONTROL_MODE
 from face_api import router as face_router
+from face_utils import warmup_face_model
 from mqtt_service import start_mqtt_bridge, stop_mqtt_bridge
 
 logger = logging.getLogger(__name__)
@@ -27,6 +28,7 @@ db.init_db()
 @app.on_event("startup")
 async def startup_event():
     logger.info("Locker control mode: %s", LOCKER_CONTROL_MODE)
+    warmup_face_model()
     start_mqtt_bridge()
 
 
